@@ -75,7 +75,7 @@ Wire it as a Claude Code `PreToolUse` hook in your `~/.claude/settings.json` or 
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "npx -y @kawacode/mcp kawacode-pre-edit-decision-check" }
+          { "type": "command", "command": "npx -y -p @kawacode/mcp kawacode-on-pre-edit" }
         ]
       }
     ]
