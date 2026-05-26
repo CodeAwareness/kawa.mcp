@@ -75,7 +75,7 @@ npx -y @kawacode/mcp
 Tell Claude Code:
 
 ```
-Read the CLAUDE.md.example file from the @kawacode/mcp package and create a CLAUDE.md in this project's root. Fill in the repoOrigin and repoPath with the actual values from this repository's git config. Fill in the Project Overview with a brief description of this project.
+Read https://raw.githubusercontent.com/kawacode-ai/kawa.mcp/main/CLAUDE.md.example and create a CLAUDE.md in this project's root from it. Fill in the repoOrigin and repoPath with the actual values from this repository's git config. Fill in the Project Overview with a brief description of this project.
 ```
 
 #### Manual setup
