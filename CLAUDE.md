@@ -19,7 +19,7 @@ Follow the standard Kawa Code workflow defined in the parent [Odin CLAUDE.md](..
 5. Before commit — `record_decision` for significant decisions.
 6. After commit — `complete_intent` with the commit SHA and `status: "committed"`.
 
-Use `repoOrigin: git@github.com:codeawareness/kawa.mcp.git` and `repoPath: /Users/markvasile/Code/CodeAwareness/Odin/kawa.mcp`.
+Use `repoOrigin: git@github.com:kawacode-ai/kawa.mcp.git` and `repoPath: /Users/markvasile/Code/CodeAwareness/Odin/kawa.mcp`.
 
 ---
 

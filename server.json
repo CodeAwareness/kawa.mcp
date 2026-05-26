@@ -5,7 +5,7 @@
   "description": "Team-aware memory: intent, decisions, real-time conflicts for AI coding assistants.",
   "websiteUrl": "https://kawacode.ai",
   "repository": {
-    "url": "https://github.com/codeawareness/kawa.mcp",
+    "url": "https://github.com/kawacode-ai/kawa.mcp",
     "source": "github"
   },
   "version": "6.1.2",
