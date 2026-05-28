@@ -40,13 +40,25 @@ export interface ListTeamIntentsResponse {
 export async function listTeamIntents(input: ListTeamIntentsInput): Promise<ListTeamIntentsResponse> {
   const actualOrigin = resolveOrigin(input.repoOrigin, input.repoPath)
 
-  const res = await request('intent', 'list', {
+  const offset = input.offset ?? 0
+  const limit = input.limit ?? 50
+
+  // Server-side pagination + filtering via intent:list-paginated. The older
+  // intent:list handler hard-capped the API call at limit=50/offset=0, so
+  // pagination and filters could never see past the first 50 intents.
+  const res = await request('intent', 'list-paginated', {
     repoOrigin: actualOrigin,
+    lang: 'en',
+    limit,
+    offset,
     status: input.status,
+    author: input.author,
+    since: input.since,
+    until: input.until,
     ...extractForkFields(input),
   })
 
-  let intents: TeamIntent[] = (res.intents || []).map((intent: any) => ({
+  const intents: TeamIntent[] = (res.intents || []).map((intent: any) => ({
     id: intent.id || '',
     title: intent.title || '',
     description: intent.description || '',
@@ -59,39 +71,15 @@ export async function listTeamIntents(input: ListTeamIntentsInput): Promise<List
     updatedAt: intent.updated_at || intent.updatedAt || ''
   }))
 
-  // Apply filters
-  if (input.status) {
-    intents = intents.filter(i => i.status === input.status)
-  }
-  if (input.author) {
-    const authorLower = input.author.toLowerCase()
-    intents = intents.filter(i => i.author.toLowerCase().includes(authorLower))
-  }
-  if (input.since) {
-    const sinceDate = new Date(input.since)
-    if (!isNaN(sinceDate.getTime())) {
-      intents = intents.filter(i => new Date(i.updatedAt) >= sinceDate)
-    }
-  }
-  if (input.until) {
-    const untilDate = new Date(input.until)
-    if (!isNaN(untilDate.getTime())) {
-      intents = intents.filter(i => new Date(i.updatedAt) <= untilDate)
-    }
-  }
-
-  const total = intents.length
-  const offset = input.offset ?? 0
-  const limit = input.limit ?? 50
-  const paginated = intents.slice(offset, offset + limit)
-
-  const activeCount = paginated.filter(i => i.status === 'active').length
+  // totalCount is the full filtered result size on the server; intents is the page.
+  const total = typeof res.totalCount === 'number' ? res.totalCount : intents.length
+  const activeCount = intents.filter(i => i.status === 'active').length
   const summary = total === 0
     ? 'No intents found'
-    : `${paginated.length} intent(s) returned (${total} total${offset > 0 ? `, offset ${offset}` : ''}), ${activeCount} active`
+    : `${intents.length} intent(s) returned (${total} total${offset > 0 ? `, offset ${offset}` : ''}), ${activeCount} active`
 
   return {
-    intents: paginated,
+    intents,
     count: total,
     summary
   }
@@ -106,7 +94,7 @@ Use this to:
 - Check for potential overlapping work before starting a new task
 - Review the status of various features/refactors in progress
 
-Supports filtering by status, author, and date range. Paginated (default: 50 per page).`,
+Filtering (status, author, date range) and pagination are applied server-side across the full result set (default: 50 per page; use limit/offset to page). \`count\` is the total number of matching intents, not just the returned page.`,
   inputSchema: listTeamIntentsSchema,
   handler: listTeamIntents
 }
