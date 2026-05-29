@@ -35,6 +35,7 @@ import {
   detectIntentConflicts,
   inferHistory,
   evolveDecisions,
+  updateFeatures,
   preEditDecisionCheck,
   preEditAcknowledge
 } from './tools/index.js'
@@ -147,6 +148,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'evolve_decisions':
         result = await evolveDecisions(args as any)
+        break
+      case 'update_features':
+        result = await updateFeatures(args as any)
         break
       case 'pre_edit_decision_check':
         result = await preEditDecisionCheck(args as any)

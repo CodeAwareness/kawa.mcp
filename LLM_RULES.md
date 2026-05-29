@@ -214,6 +214,12 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | `infer_history` | Analyze git commit history to extract development stories and decisions |
 | `evolve_decisions` | Re-curate previously extracted stories so only the decisions still worth keeping are persisted |
 
+#### Feature Catalog
+
+| Tool | Purpose |
+|------|---------|
+| `update_features` | Group the repo's not-yet-categorized intents into the running feature catalog (additive) |
+
 #### Lightweight Logging
 
 | Tool | Purpose |

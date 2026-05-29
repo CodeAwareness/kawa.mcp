@@ -16,6 +16,7 @@ import { editSessionDecisionTool, editSessionDecision, editSessionDecisionSchema
 import { detectIntentConflictsTool, detectIntentConflicts, detectIntentConflictsSchema } from './detect-intent-conflicts.js'
 import { inferHistoryTool, inferHistory, inferHistorySchema } from './infer-history.js'
 import { evolveDecisionsTool, evolveDecisions, evolveDecisionsSchema } from './evolve-decisions.js'
+import { updateFeaturesTool, updateFeatures, updateFeaturesSchema } from './update-features.js'
 import { preEditDecisionCheckTool, preEditDecisionCheck, preEditDecisionCheckSchema } from './pre-edit-decision-check.js'
 import { preEditAcknowledgeTool, preEditAcknowledge, preEditAcknowledgeSchema } from './pre-edit-acknowledge.js'
 
@@ -81,6 +82,10 @@ export {
   evolveDecisionsTool,
   evolveDecisions,
   evolveDecisionsSchema,
+  // Feature catalog
+  updateFeaturesTool,
+  updateFeatures,
+  updateFeaturesSchema,
   // Pre-edit decision check
   preEditDecisionCheckTool,
   preEditDecisionCheck,
@@ -115,6 +120,8 @@ export const allTools = [
   // Inference pipeline tools
   inferHistoryTool,
   evolveDecisionsTool,
+  // Feature catalog
+  updateFeaturesTool,
   // Pre-edit decision check
   preEditDecisionCheckTool,
   preEditAcknowledgeTool
