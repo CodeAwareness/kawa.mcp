@@ -10,6 +10,8 @@ export type UpdateFeaturesInput = z.infer<typeof updateFeaturesSchema>
 export interface UpdateFeaturesResponse {
   success: boolean
   count?: number
+  driftSpinoffs?: number
+  forcedFallback?: number
   origin?: string
   error?: string
   message: string
@@ -28,11 +30,21 @@ export async function updateFeatures(input: UpdateFeaturesInput): Promise<Update
   }
 
   const count = res?.count ?? 0
+  const driftSpinoffs = res?.driftSpinoffs ?? 0
+  const forcedFallback = res?.forcedFallback ?? 0
+
+  const notes: string[] = []
+  if (driftSpinoffs) notes.push(`${driftSpinoffs} drift spin-off${driftSpinoffs === 1 ? '' : 's'}`)
+  if (forcedFallback) notes.push(`${forcedFallback} unsorted`)
+  const suffix = notes.length ? ` (${notes.join(', ')})` : ''
+
   return {
     success: true,
     count,
+    driftSpinoffs,
+    forcedFallback,
     origin: res?.origin,
-    message: `Feature catalog updated: ${count} feature${count === 1 ? '' : 's'}.`,
+    message: `Feature catalog updated: ${count} feature${count === 1 ? '' : 's'}${suffix}.`,
   }
 }
 
