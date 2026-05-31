@@ -10,6 +10,7 @@ export const inferHistorySchema = z.object({
   maxStories: z.number().optional().default(0).describe('Maximum number of stories to analyze in this run (0 = unlimited).'),
   allowCommitSplitting: z.boolean().optional().default(false).describe('Allow splitting a single commit into multiple stories when it contains unrelated changes (recommended for repos with messy commit history)'),
   estimateOnly: z.boolean().optional().default(true).describe('If true (default), only estimate token cost without running the pipeline. Set to false to run the full pipeline.'),
+  force: z.boolean().optional().default(false).describe('Override the re-run guard. When the repo already has intents and infer_history cannot cleanly resume (missing/unreachable cursor), or when HEAD is not on the default branch, the run is stopped and a confirmation is requested. Set `force: true` to proceed anyway, accepting the duplicate-intent risk. Exact-commit duplicates are still skipped automatically; overlapping re-groupings are not. A forced run on a non-default branch additionally does NOT advance the resume cursor. Does not override a hard failure such as the desktop app being unreachable.'),
 })
 
 export type InferHistoryInput = z.infer<typeof inferHistorySchema>
@@ -28,8 +29,19 @@ export interface AutoModeResolution {
   lastSha?: string
 }
 
+/** Surfaced by the re-run guard when a run is stopped pending user confirmation. */
+export interface GuardDecision {
+  reason: 'populated_repo_no_clean_resume' | 'non_default_branch'
+  intentCount: number
+  lastSha?: string
+  head: string
+  isDefaultBranch: boolean
+}
+
 export interface InferHistoryResponse {
   started?: boolean
+  /** Set when the re-run guard stopped the run; caller should confirm and re-call with force. */
+  needsDecision?: GuardDecision
   estimate?: {
     pass1_input: number
     pass1_output: number
@@ -65,6 +77,23 @@ function describeAutoMode(am: AutoModeResolution): string {
   }
 }
 
+/** Build the agent-facing message when the re-run guard stops a run. */
+function describeGuardDecision(d: GuardDecision): string {
+  const head = d.head ? d.head.slice(0, 7) : '?'
+  if (d.reason === 'non_default_branch') {
+    return `infer_history stopped: HEAD (${head}) is not on the repository's default branch. ` +
+      `Inferring a feature branch risks creating intents that duplicate work once it is squash/rebase-merged into the default branch. ` +
+      `Recommended: switch to the default branch (main/master) and re-run. ` +
+      `To proceed here anyway, re-call infer_history with force: true — a forced non-default run will NOT advance the resume cursor.`
+  }
+  // populated_repo_no_clean_resume
+  return `infer_history stopped: this repo already has ${d.intentCount} intent(s), but the run cannot cleanly resume ` +
+    `(${d.lastSha ? `stored cursor ${d.lastSha.slice(0, 7)} is no longer reachable — rebase/GC/branch switch` : 'no resume cursor is recorded'}). ` +
+    `Re-running could create duplicate intents for history that is already covered. ` +
+    `To proceed anyway, re-call infer_history with force: true. ` +
+    `Exact-commit duplicates are skipped automatically; overlapping re-groupings are not.`
+}
+
 export async function inferHistory(input: InferHistoryInput): Promise<InferHistoryResponse> {
   // commits and commitRange are mutually exclusive. Catch in the MCP layer so
   // the user gets a clear error instead of an opaque muninn-side rejection.
@@ -78,6 +107,7 @@ export async function inferHistory(input: InferHistoryInput): Promise<InferHisto
     repoPath: input.repoPath,
     contextIssues: input.contextIssues,
     model: input.model,
+    force: input.force,
   }
   if (input.commits !== undefined) inferencePayload.commits = input.commits
   if (input.commitRange !== undefined) inferencePayload.commitRange = input.commitRange
@@ -88,6 +118,10 @@ export async function inferHistory(input: InferHistoryInput): Promise<InferHisto
     // so the caller blocks until the server returns.
     const ESTIMATE_TIMEOUT_MS = 180_000
     const res = await request('inference', 'estimate', inferencePayload, ESTIMATE_TIMEOUT_MS)
+
+    if (res.status === 'needs_decision') {
+      return { needsDecision: res.decision, message: describeGuardDecision(res.decision) }
+    }
 
     let forgeWarning = ''
     if (!res.forge_cli_available) {
@@ -119,11 +153,17 @@ export async function inferHistory(input: InferHistoryInput): Promise<InferHisto
     model: input.model,
     maxStories: input.maxStories,
     allowCommitSplitting: input.allowCommitSplitting,
+    force: input.force,
   }
   if (input.commits !== undefined) runPayload.commits = input.commits
   if (input.commitRange !== undefined) runPayload.commitRange = input.commitRange
 
   const res = await request('inference', 'run', runPayload)
+
+  if (res.status === 'needs_decision') {
+    return { needsDecision: res.decision, message: describeGuardDecision(res.decision) }
+  }
+
   const autoModeNote = res.autoMode ? describeAutoMode(res.autoMode) : ''
 
   return {
@@ -148,11 +188,13 @@ Inputs of note:
 - \`contextIssues\`: include PR/MR descriptions and issue discussions when an authenticated forge CLI (\`gh\` or \`glab\`) is available; auto-skipped otherwise.
 - \`allowCommitSplitting\`: enable when commit history is messy and a single commit may cover unrelated changes.
 - \`model\`, \`maxStories\`: Anthropic model and per-run cap.
+- \`force\` (default false): override the re-run guard (see Behavior).
 
 Behavior:
 - A run is asynchronous — returns immediately with a started/pending status; progress is reported separately.
 - Results are persisted as intents and decisions for the repo on completion.
 - If interrupted, re-running resumes from where it left off.
+- Re-run guard: a clean incremental resume runs automatically. But if the repo already has intents and the run cannot cleanly resume (missing/unreachable cursor), or HEAD is not on the default branch, the call STOPS and returns \`needsDecision\` instead of running — re-running blind there risks duplicate intents. Present the reason to the user and, if they confirm, re-call with \`force: true\`. Run on the default branch (main/master) whenever possible; inferring a feature branch is what \`force\` is for.
 - GitHub and GitLab are supported; the forge is detected from the remote origin.`,
   inputSchema: inferHistorySchema,
   handler: inferHistory
