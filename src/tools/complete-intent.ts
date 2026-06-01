@@ -6,11 +6,12 @@ import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 export const completeIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
-  intentId: z.string().optional().describe('Expected intent ID to complete. If provided, the tool verifies this matches the active intent and rejects if mismatched (prevents race conditions with concurrent sessions).'),
+  intentId: z.string().optional().describe('Target intent to complete/abandon. When omitted, completes THIS session\'s current intent. When provided, targets that specific intent directly — this is how you force-close an intent that is not your current one (e.g. another session\'s). Completing an intent created by ANOTHER team member additionally requires humanApproved=true (see below).'),
   commitSha: z.string().optional().describe('The git commit SHA to associate with this intent (if already committed)'),
   status: z.enum(['committed', 'pushed', 'done', 'abandoned', 'superseded']).default('committed')
     .describe('The new status for the intent. Use "committed" after git commit, "done" when work is complete, "abandoned" to discard, "superseded" when another intent replaces this one.'),
   supersededBy: z.string().optional().describe('Intent ID that supersedes this one. Required when status is "superseded".'),
+  humanApproved: z.boolean().optional().describe('Set to true ONLY when the human has explicitly confirmed closing an intent created by ANOTHER team member. Required for that cross-author case; ignored for your own intents. NEVER set this on your own initiative — always ask the user first and only set it after they approve.'),
   ...forkFieldsExtensions,
 })
 
@@ -88,34 +89,13 @@ export interface CompleteIntentResponse {
 export async function completeIntent(input: CompleteIntentInput): Promise<CompleteIntentResponse> {
   const actualOrigin = resolveOrigin(input.repoOrigin, input.repoPath)
 
-  // If intentId provided, verify it matches the active intent before completing
-  if (input.intentId) {
-    const activeRes = await request('intent', 'get-active', { repoOrigin: actualOrigin })
-    const activeId = activeRes.intentId || activeRes.intent?.id || ''
-
-    if (!activeId) {
-      return {
-        success: false,
-        intentId: input.intentId,
-        previousStatus: 'unknown',
-        newStatus: input.status,
-        commitSha: input.commitSha,
-        message: `No active intent found. Expected intent ${input.intentId.substring(0, 8)} but nothing is active.`
-      }
-    }
-
-    if (activeId !== input.intentId) {
-      const activeTitle = activeRes.intent?.title || 'unknown'
-      return {
-        success: false,
-        intentId: input.intentId,
-        previousStatus: 'unknown',
-        newStatus: input.status,
-        commitSha: input.commitSha,
-        message: `Intent mismatch: expected ${input.intentId.substring(0, 8)} but active intent is "${activeTitle}" (${activeId.substring(0, 8)}). Another session may have changed the active intent.`
-      }
-    }
-  }
+  // Multi-active model (IMPLEMENTATION_PLAN_MULTI_ACTIVE_INTENTS.md §7): `intentId`
+  // is a TARGET, forwarded to Muninn directly. When omitted, Muninn completes this
+  // session's current pointer; when provided, it targets that specific intent
+  // (force-close). There is no per-repo single "active" intent to verify against
+  // anymore, so the old get-active match-or-reject guard is gone. The same-user vs
+  // cross-user authorization (and the humanApproved requirement for closing a
+  // teammate's intent) is hard-enforced API-side.
 
   // Muninn's v2 distillation pipeline (Sonnet distill + per-pair Haiku conflict
   // judge + recall embeddings) can run well past the 30s default — measured
@@ -126,9 +106,11 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   const COMPLETE_TIMEOUT_MS = 180_000
   const res = await request('intent', 'complete', {
     repoOrigin: actualOrigin,
+    intentId: input.intentId,
     status: input.status,
     commitSha: input.commitSha,
     supersededBy: input.supersededBy,
+    humanApproved: input.humanApproved,
     ...extractForkFields(input),
   }, COMPLETE_TIMEOUT_MS)
 

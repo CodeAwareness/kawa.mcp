@@ -19,8 +19,26 @@ import * as crypto from 'crypto'
 const EXTENSION_ID = 'mcp'
 const EXTENSION_DOMAINS = ['intent', 'intent-block', 'decision', 'claude-code', 'code', 'inference']
 
-/** Stable session ID for this MCP process. Identifies this agent in intent attribution. */
-export const SESSION_ID = `mcp-${crypto.randomBytes(4).toString('hex')}`
+/**
+ * Stable session ID for this MCP process — identifies this agent/session for
+ * intent attribution AND for the per-session "current" intent pointer in Muninn
+ * (IMPLEMENTATION_PLAN_MULTI_ACTIVE_INTENTS.md §2 D1).
+ *
+ * Prefer Claude Code's `CLAUDE_CODE_SESSION_ID`: it's the SAME id the thought-
+ * capture path keys on (the `thoughts/active/session-{id}.jsonl` filename and the
+ * extractor trigger), so the IPC and capture worlds converge on one value, and it
+ * is stable across MCP reconnects (a fresh socket `caw` recovers the same focus).
+ * Subagents share their parent session's id — there is no per-subagent id at the
+ * MCP layer (see plan §11).
+ *
+ * Fallback: hosts that don't set the env var (Cursor/Windsurf, older Claude Code)
+ * get a generated `mcp-<random>`. Those have no Claude thought-capture, so capture
+ * routing is moot and the random id serves only as an IPC discriminator.
+ *
+ * Stamped as `_agentId` on every outgoing message (see `request()` below); Muninn
+ * lifts it into `IpcMessage.aid` and keys the per-session current pointer on it.
+ */
+export const SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID || `mcp-${crypto.randomBytes(4).toString('hex')}`
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const HANDSHAKE_TIMEOUT_MS = 10_000
 
