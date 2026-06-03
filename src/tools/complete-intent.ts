@@ -35,6 +35,20 @@ export interface ConflictMatch {
   description?: string
 }
 
+/**
+ * A live collaborator (HAI: teammate or AI agent) whose published in-progress
+ * diff overlaps the work just completed, grouped by HAI across all files
+ * (Layer C completion-time collision query). Advisory awareness only — it does
+ * not block completion; the overlap is exact (both sides are in the shared
+ * baseline / cSHA line-space).
+ */
+export interface CompletionCollision {
+  uid: string
+  isAgent: boolean
+  label: string
+  files: { fpath: string, ranges: number[][] }[]
+}
+
 export interface CompleteIntentResponse {
   success: boolean
   intentId: string
@@ -84,6 +98,13 @@ export interface CompleteIntentResponse {
   deferredStages?: string[]
   deferredDecisionCount?: number
   deferredError?: string
+  /**
+   * Layer C completion-time collision query: live HAIs whose published diffs
+   * overlap the work just completed (grouped by HAI). Present only on a
+   * successful completion when at least one overlap exists. Advisory — surface
+   * it to the user as a coordination heads-up; it does not affect success.
+   */
+  collisions?: CompletionCollision[]
 }
 
 export async function completeIntent(input: CompleteIntentInput): Promise<CompleteIntentResponse> {
@@ -124,6 +145,7 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   const reason: 'conflicts' | 'transient-failure' | undefined =
     res.reason === 'conflicts' || res.reason === 'transient-failure' ? res.reason : undefined
   const apiSyncDeferred = res.apiSyncDeferred === true
+  const completionCollisions: CompletionCollision[] = Array.isArray(res.collisions) ? res.collisions : []
 
   // Branch on the four §7.2 / §7.3 outcome shapes — pick the message that
   // tells the agent exactly what to surface to the user.
@@ -190,7 +212,15 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
     const deferredPart = apiSyncDeferred
       ? ` — API sync deferred (${(res.deferredStages || []).join(', ')}); will retry on the next sync tick`
       : ''
-    message = statusMsg + shaPart + distilledPart + deferredPart
+    // Layer C: a live HAI's in-progress diff overlaps the work just completed.
+    // Advisory coordination heads-up appended to the success message.
+    const collisionPart = completionCollisions.length > 0
+      ? ` — heads-up: ${completionCollisions.length} live collaborator(s) overlap this work: ` +
+        completionCollisions
+          .map(c => `${c.label}${c.isAgent ? ' (agent)' : ''} on ${c.files.map(f => f.fpath).join(', ')}`)
+          .join('; ')
+      : ''
+    message = statusMsg + shaPart + distilledPart + deferredPart + collisionPart
   }
 
   return {
@@ -209,6 +239,7 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
     deferredStages: Array.isArray(res.deferredStages) ? res.deferredStages : undefined,
     deferredDecisionCount: typeof res.deferredDecisionCount === 'number' ? res.deferredDecisionCount : undefined,
     deferredError: res.deferredError,
+    collisions: completionCollisions.length > 0 ? completionCollisions : undefined,
   }
 }
 
@@ -237,6 +268,10 @@ REQUIRED: Inspect the response after calling this tool. Four outcomes:
    get_intent_decisions / get_relevant_context if the user wants details.
    If response.apiSyncDeferred === true, also mention that the API sync was
    deferred; the queued writes will replay on the next sync tick.
+   If response.collisions is non-empty, a live collaborator's (HAI's)
+   in-progress edits overlap the work you just completed — surface it as a
+   coordination heads-up (who, and which files), naming response.collisions[].label
+   and the files. It's advisory, not a failure; the completion still succeeded.
 
 2. response.success === false AND response.conflicts is non-empty:
    The distillation produced decisions that contradict existing standards in
