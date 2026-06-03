@@ -54,11 +54,23 @@ export interface EnclosingSymbol {
   signature: string
 }
 
+/** A live collaborator (HAI) whose in-progress edits overlap the touched range. */
+export interface Collision {
+  uid: string
+  sha: string
+  /** Overlapping [start,end] line ranges in the shared baseline (cSHA) space. */
+  ranges: number[][]
+  isAgent: boolean
+  label: string
+}
+
 export interface PreEditDecisionCheckResponse {
   triggered: boolean
-  tier: '1a' | '1b' | null
+  tier: '1a' | '1b' | '2' | null
   intents?: any[]
   decisions?: any[]
+  /** Tier 2 — live HAIs whose edits physically overlap these lines (code conflict). */
+  collisions?: Collision[]
   filtered: {
     activeIntentSupersedes: string[]
     repoScopedSupersedes: string[]
@@ -96,6 +108,7 @@ export const preEditDecisionCheckTool = {
 Call this BEFORE editing code in a kawa-indexed repo. Surfaces:
 - Tier 1a — overlapping intents whose blocks cover these lines (line-precise team coordination + intent-scoped decisions)
 - Tier 1b — repo decisions whose relatedFiles include this file (file-coarse, catches infer_history-extracted constraints)
+- Tier 2 — live collaborators (HAIs: teammates or AI agents) whose in-progress edits physically overlap these lines, returned in collisions[] (code-conflict awareness; coordinate before editing)
 
 Decisions already overridden via record_decision(supersedes=...) are filtered out automatically.
 
