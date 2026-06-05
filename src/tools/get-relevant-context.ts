@@ -31,7 +31,6 @@ export interface ScoredDecision {
   intentIds: string[]
   type: string
   summary: string
-  rationale: string
   relatedFiles: string[]
   hasViolations: boolean
   score: number
@@ -104,7 +103,9 @@ export async function getRelevantContext(input: GetRelevantContextInput): Promis
       intentIds: d.intentIds || d.intent_ids || (d.intentId || d.intent_id ? [d.intentId || d.intent_id] : []),
       type: d.decisionType || d.decision_type || d.type || '',
       summary: d.summary || '',
-      rationale: d.rationale || '',
+      // Lean payload (INTENT_INTELLIGENCE.md §5.8): rationale is dropped from the
+      // recall surface — it dominated context accumulation (re-sent every turn).
+      // Fetch full rationale on demand via get_decision_detail(decisionId).
       relatedFiles: d.relatedFiles || d.related_files || [],
       hasViolations: (d.constraintViolations || d.constraint_violations || []).length > 0,
       score: d.score || 0,
@@ -135,7 +136,7 @@ Inputs of note:
 
 Returns:
 - \`relevantIntents\`: past work units (intents) related to the task, scored by relevance.
-- \`relevantDecisions\`: prior decisions related to the task — both intent-scoped and repo-scoped.
+- \`relevantDecisions\`: prior decisions related to the task — both intent-scoped and repo-scoped. Summary-only (no inline rationale, to keep context lean); call \`get_decision_detail(decisionId)\` for the full rationale/context/consequences of any decision you want to open.
 
 Recommended sequence:
 1. \`check_active_intent\` at session start to resume any existing work.

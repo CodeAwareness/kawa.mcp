@@ -135,16 +135,54 @@ function resolveTarget(payload: HookPayload): ResolvedTarget | null {
   return null
 }
 
+// Payload economy for the one inline-rationale surface (INTENT_INTELLIGENCE.md §5.8).
+// This block is injected into the agent transcript and is append-only — it
+// re-sends every turn until compaction — so per-fire size is first-class.
+//   - RATIONALE_CHARS: each rationale is truncated to this, with a never-silent
+//     marker that doubles as the expand pointer (amount cut + get_decision_detail).
+//   - MAX_BLOCK_TOKENS: a per-fire budget; once exceeded, remaining decisions are
+//     dropped with an explicit "N more suppressed" line (never a silent cap).
+const RATIONALE_CHARS = 280
+const MAX_BLOCK_TOKENS = 600
+const CHARS_PER_TOKEN = 4 // coarse char→token approximation; deterministic, no tokenizer dep
+const MAX_BLOCK_CHARS = MAX_BLOCK_TOKENS * CHARS_PER_TOKEN
+
+function truncateRationale(d: SurfacedDecision): string {
+  const r = d.rationale ?? ''
+  if (r.length <= RATIONALE_CHARS) return r
+  const head = r.slice(0, RATIONALE_CHARS).trimEnd()
+  const cut = r.length - head.length
+  return `${head}… ⟨+${cut} chars · get_decision_detail("${d.decisionId}")⟩`
+}
+
 function formatBlockMessage(target: ResolvedTarget, res: EvaluateResponse): string {
   const lines: string[] = []
   const symbol = res.enclosingSymbol?.name ? ` (in ${res.enclosingSymbol.name})` : ''
   lines.push(
     `Pre-edit decision check: prior reasoning is attached to ${target.filePath}:${target.startLine}-${target.endLine}${symbol}.`,
   )
-  for (const d of res.decisions ?? []) {
-    lines.push(`  • [${d.type}] ${d.summary ?? ''}`)
-    if (d.rationale) lines.push(`    ${d.rationale}`)
+
+  const decisions = res.decisions ?? []
+  let usedChars = 0
+  let shown = 0
+  for (const d of decisions) {
+    const entry: string[] = [`  • [${d.type}] ${d.summary ?? ''}`]
+    const rationale = truncateRationale(d)
+    if (rationale) entry.push(`    ${rationale}`)
+    const entryChars = entry.join('\n').length
+    // Always show at least one decision, even if it alone exceeds the budget.
+    if (shown > 0 && usedChars + entryChars > MAX_BLOCK_CHARS) {
+      const remaining = decisions.length - shown
+      lines.push(
+        `  … ${remaining} more decision${remaining === 1 ? '' : 's'} suppressed (per-fire budget) — call get_decision_detail(decisionId) to inspect.`,
+      )
+      break
+    }
+    lines.push(...entry)
+    usedChars += entryChars
+    shown += 1
   }
+
   lines.push('')
   lines.push('Override options:')
   lines.push('  1) record_decision(type:"fork", supersedes:[<id>], rationale:"...") then retry the Edit.')

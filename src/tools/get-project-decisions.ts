@@ -24,10 +24,6 @@ export interface ProjectDecision {
   timestamp: string
   type: 'fork' | 'abandoned' | 'discovery' | 'constraint' | 'tradeoff' | 'dependency'
   summary: string
-  rationale: string
-  context?: string
-  alternatives: string[]
-  consequences?: string
   relatedFiles: string[]
   constraintsChecked: string[]
   constraintViolations: ConstraintViolation[]
@@ -52,10 +48,9 @@ export async function getProjectDecisions(input: GetProjectDecisionsInput): Prom
     timestamp: d.timestamp || d.created_at || d.createdAt || '',
     type: d.decision_type || d.decisionType || d.type,
     summary: d.summary || '',
-    rationale: d.rationale || '',
-    context: d.context,
-    alternatives: d.alternatives || [],
-    consequences: d.consequences,
+    // Lean payload (INTENT_INTELLIGENCE.md §5.8): the unbounded free-text fields
+    // (rationale/context/consequences/alternatives) are dropped from this recall
+    // surface. Fetch them on demand via get_decision_detail(decisionId).
     relatedFiles: d.related_files || d.relatedFiles || [],
     constraintsChecked: d.constraints_checked || d.constraintsChecked || [],
     constraintViolations: d.constraint_violations || d.constraintViolations || []
@@ -81,11 +76,10 @@ Returns:
 - decisions: Array of decisions with their intent context
 - count: Total number of decisions
 
-Each decision includes:
+Each decision includes (summary-only, to keep context lean — call get_decision_detail(decisionId) for full rationale/context/consequences/alternatives):
 - intentIds: The intents this decision belongs to (array — a decision can span multiple intents)
 - type: fork, abandoned, discovery, constraint, tradeoff, or dependency
 - summary: Brief description of the decision
-- rationale: Why this decision was made
 - relatedFiles: Files affected by this decision
 - constraintViolations: Options that were rejected due to constraints`,
   inputSchema: getProjectDecisionsSchema,

@@ -12,6 +12,7 @@ import { logWorkTool, logWork, logWorkSchema } from './log-work.js'
 import { recordDecisionTool, recordDecision, recordDecisionSchema } from './record-decision.js'
 import { getSessionDecisionsTool, getSessionDecisions, getSessionDecisionsSchema } from './get-session-decisions.js'
 import { getProjectDecisionsTool, getProjectDecisions, getProjectDecisionsSchema } from './get-project-decisions.js'
+import { getDecisionDetailTool, getDecisionDetail, getDecisionDetailSchema } from './get-decision-detail.js'
 import { editSessionDecisionTool, editSessionDecision, editSessionDecisionSchema } from './edit-session-decision.js'
 import { detectIntentConflictsTool, detectIntentConflicts, detectIntentConflictsSchema } from './detect-intent-conflicts.js'
 import { inferHistoryTool, inferHistory, inferHistorySchema } from './infer-history.js'
@@ -68,6 +69,9 @@ export {
   getProjectDecisionsTool,
   getProjectDecisions,
   getProjectDecisionsSchema,
+  getDecisionDetailTool,
+  getDecisionDetail,
+  getDecisionDetailSchema,
   editSessionDecisionTool,
   editSessionDecision,
   editSessionDecisionSchema,
@@ -114,6 +118,7 @@ export const allTools = [
   recordDecisionTool,
   getSessionDecisionsTool,
   getProjectDecisionsTool,
+  getDecisionDetailTool,
   editSessionDecisionTool,
   // Conflict detection
   detectIntentConflictsTool,

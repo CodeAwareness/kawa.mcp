@@ -23,11 +23,6 @@ export interface DecisionPoint {
   timestamp: string
   type: 'fork' | 'abandoned' | 'discovery' | 'constraint' | 'tradeoff' | 'dependency'
   summary: string
-  rationale: string
-  context?: string
-  alternatives: string[]
-  consequences?: string
-  symptom?: string
   relatedFiles: string[]
   constraintsChecked: string[]
   constraintViolations: ConstraintViolation[]
@@ -54,10 +49,10 @@ export async function getSessionDecisions(input: GetSessionDecisionsInput): Prom
     timestamp: d.timestamp || d.created_at || d.createdAt || '',
     type: d.decision_type || d.decisionType || d.type,
     summary: d.summary || '',
-    rationale: d.rationale || '',
-    context: d.context,
-    alternatives: d.alternatives || [],
-    consequences: d.consequences,
+    // Lean payload (INTENT_INTELLIGENCE.md §5.8): unbounded free-text fields
+    // (rationale/context/consequences/alternatives/symptom) are dropped from this
+    // recall surface. Fetch them on demand via get_decision_detail(decisionId).
+    // appliesWhen is retained — it is short, high-signal, and excluded from embeddings.
     relatedFiles: d.related_files || d.relatedFiles || [],
     constraintsChecked: d.constraints_checked || d.constraintsChecked || [],
     constraintViolations: d.constraint_violations || d.constraintViolations || [],
@@ -81,7 +76,7 @@ Decisions are presented for user review and can be edited or removed before bein
 
 Returns:
 - intentId: The intent these decisions belong to
-- decisions: Array of decision points with full details
+- decisions: Array of decision points (summary-only — call get_decision_detail(decisionId) for full rationale/context/consequences/alternatives)
 - count: Number of decisions recorded`,
   inputSchema: getSessionDecisionsSchema,
   handler: getSessionDecisions

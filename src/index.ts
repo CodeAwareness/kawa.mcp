@@ -31,6 +31,7 @@ import {
   recordDecision,
   getSessionDecisions,
   getProjectDecisions,
+  getDecisionDetail,
   editSessionDecision,
   detectIntentConflicts,
   inferHistory,
@@ -136,6 +137,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'get_project_decisions':
         result = await getProjectDecisions(args as any)
+        break
+      case 'get_decision_detail':
+        result = await getDecisionDetail(args as any)
         break
       case 'edit_session_decision':
         result = await editSessionDecision(args as any)

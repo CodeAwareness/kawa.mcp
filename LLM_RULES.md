@@ -182,6 +182,9 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | Tool | Purpose |
 |------|---------|
 | `get_relevant_context` | Get context relevant to a specific task (intents, decisions) |
+| `get_decision_detail` | Expand one decision (by `decisionId`) to its full rationale/context/consequences/alternatives |
+
+> **Lean recall contract.** `get_relevant_context`, `get_project_decisions`, and `get_session_decisions` return decisions **summary-only** — they omit the full `rationale` (and `context`/`consequences`/`alternatives`) to keep context lean, since MCP results are re-sent every turn. When you need the full reasoning for a specific decision, call `get_decision_detail(decisionId)` to expand just that one.
 
 #### Intent Management
 
@@ -202,8 +205,9 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | Tool | Purpose |
 |------|---------|
 | `record_decision` | Record an architectural decision with rationale |
-| `get_session_decisions` | Get decisions recorded during current session |
-| `get_project_decisions` | Get all decisions across all intents for the project |
+| `get_session_decisions` | Get decisions recorded during current session (summary-only; expand via `get_decision_detail`) |
+| `get_project_decisions` | Get all decisions across all intents for the project (summary-only; expand via `get_decision_detail`) |
+| `get_decision_detail` | Expand one decision to full rationale/context/consequences/alternatives |
 | `edit_session_decision` | Edit or delete a decision before intent completion |
 | `detect_intent_conflicts` | Detect if current intent decisions conflict with team decisions |
 
