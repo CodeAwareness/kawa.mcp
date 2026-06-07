@@ -34,6 +34,15 @@ export const recordDecisionSchema = z.object({
     .describe('Thought-chain entry IDs this record was extracted from. Only set by the extractor path.'),
   appliesWhen: z.string().optional()
     .describe('Trigger condition / "How to apply" — populate ONLY when the decision is plainly conditional (e.g. "language is Go", "when running in production", "when working in module X", "when the error is ECONNRESET"). Skip when the rule has no clean activation condition or when the rationale already implies universality. Treat applies_when as load-bearing context the LLM uses at recall time to decide whether the decision is relevant — not a soft hint. Strong-signal-only.'),
+  resolvedCollision: z.object({
+    peerUid: z.string().describe('The colliding peer (HAI) uid — the collision.uid from the resolution_required response.'),
+    peerLabel: z.string().optional().describe('Human-readable peer label, if known.'),
+    filePath: z.string().describe('File where the overlap occurred (relative to repoPath).'),
+    ranges: z.array(z.array(z.number())).describe('The overlapping [start, end] line ranges you resolved.'),
+    peerIntentId: z.string().optional().describe("The peer's intent id, when resolvable (else omit)."),
+    baselineSha: z.string().optional().describe('The cSHA baseline the ranges are expressed in.'),
+  }).optional()
+    .describe('Layer C audit — set ONLY when this decision records how you resolved a completion-time code collision (i.e. after complete_intent returned resolution_required). Links the decision to the live peer you yielded to or overrode.'),
   ...forkFieldsExtensions,
 })
 
@@ -64,6 +73,7 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
     confidence: input.confidence,
     sourceThoughtIds: input.sourceThoughtIds || [],
     appliesWhen: input.appliesWhen,
+    resolvedCollision: input.resolvedCollision,
     ...extractForkFields(input),
   })
 
