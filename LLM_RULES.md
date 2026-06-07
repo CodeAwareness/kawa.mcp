@@ -230,6 +230,14 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 |------|---------|
 | `log_work` | Log completed work without the full intent lifecycle (quick fixes, trivial changes) |
 
+#### Conflict Resolution (Layer C)
+
+| Tool | Purpose |
+|------|---------|
+| `get_resolution_context` | When a live peer is editing the same lines, fetch their decrypted code at the overlap + recorded reasoning + a resolution guardrail, so you can adapt before writing |
+
+> **Detect → resolve protocol.** A live collision surfaces as a non-empty `collisions[]` in the pre-edit check (run automatically). When you see one, call `get_resolution_context(peerUid, filePath, ranges)` with the collision's `uid` and overlapping `ranges`. It returns the peer's actual code at those lines (`peerSnippet`), the file's recorded decisions, and a `guardrail`: never overwrite a peer's **committed** work; your resolution is an ordinary git edit (revert is the undo); record_decision(type=fork|tradeoff, …) explaining how you resolved before completing; and choose ONE coherent result — never blindly interleave both diffs. This is advisory and proactive — adapt your edit to avoid the conflict.
+
 ### Repository Origin
 
 Replace with your repository's origin:

@@ -20,6 +20,7 @@ import { evolveDecisionsTool, evolveDecisions, evolveDecisionsSchema } from './e
 import { updateFeaturesTool, updateFeatures, updateFeaturesSchema } from './update-features.js'
 import { preEditDecisionCheckTool, preEditDecisionCheck, preEditDecisionCheckSchema } from './pre-edit-decision-check.js'
 import { preEditAcknowledgeTool, preEditAcknowledge, preEditAcknowledgeSchema } from './pre-edit-acknowledge.js'
+import { getResolutionContextTool, getResolutionContext, getResolutionContextSchema } from './get-resolution-context.js'
 
 // Re-export everything
 export {
@@ -96,7 +97,10 @@ export {
   preEditDecisionCheckSchema,
   preEditAcknowledgeTool,
   preEditAcknowledge,
-  preEditAcknowledgeSchema
+  preEditAcknowledgeSchema,
+  getResolutionContextTool,
+  getResolutionContext,
+  getResolutionContextSchema
 }
 
 export const allTools = [
@@ -129,5 +133,7 @@ export const allTools = [
   updateFeaturesTool,
   // Pre-edit decision check
   preEditDecisionCheckTool,
-  preEditAcknowledgeTool
+  preEditAcknowledgeTool,
+  // Layer C conflict resolution
+  getResolutionContextTool
 ]
