@@ -18,6 +18,11 @@
  *   - "review"               → exit 0 + JSON on stdout (advisory)
  *   - "proceed" / silent     → exit 0, no output
  *
+ * This hook carries only the SEMANTIC (decision-tier) signal. The live-HAI
+ * code-collision signal was relocated off this per-edit path to a once-per-turn
+ * check in kawacode-on-stop (COLLISION_SURFACE_RELOCATION.md) — pre-edit no
+ * longer queries or surfaces collisions.
+ *
  * Failure discipline: every error path exits 0. Hook must not block
  * Claude Code's turn loop on infra issues. (Same fail-soft carve-out
  * as kawacode-on-stop — see that file's header for the rule.)
