@@ -39,7 +39,9 @@ import {
   updateFeatures,
   preEditDecisionCheck,
   preEditAcknowledge,
-  getResolutionContext
+  getResolutionContext,
+  arbiterResolve,
+  arbiterApply
 } from './tools/index.js'
 import { prompts, intentFirstWorkflowPrompt } from './prompts/intent-first-workflow.js'
 import { resources, readActiveIntentResource } from './resources/active-intent.js'
@@ -165,6 +167,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'get_resolution_context':
         result = await getResolutionContext(args as any)
+        break
+      case 'arbiter_resolve':
+        result = await arbiterResolve(args as any)
+        break
+      case 'arbiter_apply':
+        result = await arbiterApply(args as any)
         break
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`)

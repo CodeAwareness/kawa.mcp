@@ -21,6 +21,8 @@ import { updateFeaturesTool, updateFeatures, updateFeaturesSchema } from './upda
 import { preEditDecisionCheckTool, preEditDecisionCheck, preEditDecisionCheckSchema } from './pre-edit-decision-check.js'
 import { preEditAcknowledgeTool, preEditAcknowledge, preEditAcknowledgeSchema } from './pre-edit-acknowledge.js'
 import { getResolutionContextTool, getResolutionContext, getResolutionContextSchema } from './get-resolution-context.js'
+import { arbiterResolveTool, arbiterResolve, arbiterResolveSchema } from './arbiter-resolve.js'
+import { arbiterApplyTool, arbiterApply, arbiterApplySchema } from './arbiter-apply.js'
 
 // Re-export everything
 export {
@@ -100,7 +102,13 @@ export {
   preEditAcknowledgeSchema,
   getResolutionContextTool,
   getResolutionContext,
-  getResolutionContextSchema
+  getResolutionContextSchema,
+  arbiterResolveTool,
+  arbiterResolve,
+  arbiterResolveSchema,
+  arbiterApplyTool,
+  arbiterApply,
+  arbiterApplySchema
 }
 
 export const allTools = [
@@ -135,5 +143,8 @@ export const allTools = [
   preEditDecisionCheckTool,
   preEditAcknowledgeTool,
   // Layer C conflict resolution
-  getResolutionContextTool
+  getResolutionContextTool,
+  // Arbiter v2 conflict resolution (resolve / apply)
+  arbiterResolveTool,
+  arbiterApplyTool
 ]
