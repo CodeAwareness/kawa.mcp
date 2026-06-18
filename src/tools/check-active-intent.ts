@@ -47,19 +47,9 @@ export interface ActiveIntentResponse {
     description: string
     templateType: 'feature' | 'refactor' | 'exploration'
     constraints: string[]
-    /**
-     * `active` — currently being worked on (default).
-     * `pending` — auto-finalized by the sweeper or blocked at completion by
-     * conflicts; reportable as "live context" so the agent can prompt the
-     * user to resume via activate_intent or finalize via complete_intent.
-     */
+    /** `active` — currently being worked on (default). Terminal states:
+     * committed/pushed/done/abandoned/superseded. */
     status: string
-    /**
-     * Set when status === 'pending'. One of `sweeper-auto-finalize` (24h
-     * inactivity, no conflicts) or `sweeper-blocked-conflicts` (24h
-     * inactivity, distilled decisions contradicted standards).
-     */
-    pendingReason?: string
     branch: string
     forkedFrom?: string
     blocks: IntentBlock[]
@@ -101,7 +91,6 @@ export async function checkActiveIntent(input: CheckActiveIntentInput): Promise<
       templateType: (intent.templateType || 'feature') as 'feature' | 'refactor' | 'exploration',
       constraints: intent.constraints || [],
       status: intent.status || 'active',
-      pendingReason: intent.pendingReason,
       branch: intent.branch || '',
       forkedFrom: intent.forkedFrom,
       blocks: [] // Blocks are tracked separately by intent-block service
@@ -130,14 +119,9 @@ An active intent tracks what the user is working on, enabling:
 - Automatic assignment of code blocks to the intent
 
 Status semantics:
-- "active" — normal, in-progress.
-- "pending" — auto-finalized by the orphan-recovery sweeper or blocked at
-  completion by conflicts. Pending is treated as live context for the repo:
-  prompt the user to resume the work (activate_intent) or finalize it
-  (complete_intent) before starting new unrelated work. Inspect "pendingReason"
-  to tell the user WHY the intent went pending — "sweeper-auto-finalize"
-  (24h idle) or "sweeper-blocked-conflicts" (decisions contradicted standards
-  on the auto-finalize attempt).`,
+- "active" — normal, in-progress. A stale intent simply stays "active"; the
+  sweeper preserves its work without any status transition.
+- terminal states — committed / pushed / done / abandoned / superseded.`,
   inputSchema: checkActiveIntentSchema,
   handler: checkActiveIntent
 }

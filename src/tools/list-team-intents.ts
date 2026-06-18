@@ -6,8 +6,8 @@ import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 export const listTeamIntentsSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
-  status: z.enum(['active', 'pending', 'committed', 'pushed', 'done', 'abandoned']).optional()
-    .describe('Filter by intent status. "pending" surfaces intents auto-finalized by the sweeper or blocked at completion by conflicts — these are resumable via activate_intent.'),
+  status: z.enum(['active', 'committed', 'pushed', 'done', 'abandoned']).optional()
+    .describe('Filter by intent status.'),
   author: z.string().optional().describe('Filter by author name or ID'),
   since: z.string().optional().describe('Filter intents updated after this ISO8601 date (e.g. "2026-04-01")'),
   until: z.string().optional().describe('Filter intents updated before this ISO8601 date'),

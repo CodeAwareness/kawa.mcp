@@ -65,7 +65,7 @@ Use this to:
 - Switch your current focus to a different intent found via list_team_intents or get_relevant_context
 - Re-activate an intent that was deactivated (e.g., to complete it)
 - Resume work on a previously created intent
-- Resume an "abandoned" or "pending" intent (see below)
+- Resume an "abandoned" intent (see below)
 
 Accepts both cloud IDs (from get_relevant_context / API) and local UUIDs (from list_team_intents).
 
@@ -74,16 +74,12 @@ pointer. Many intents can be active on a repo at once (one current per
 session/teammate), so this never blocks on or displaces another session's
 active intent — there is no lock to take over.
 
-Resuming abandoned / pending intents:
+Resuming abandoned intents:
 - Abandoned intents have their decisions soft-deleted (invisible to recall and
   get_relevant_context). Activating one transparently restores them — single-intent
   decisions for this intent get their soft-delete cleared so the prior reasoning
   becomes visible again. Multi-intent decisions stay visible throughout (they were
-  never soft-deleted).
-- Pending intents are intents auto-finalized by the orphan-recovery sweeper (24h
-  inactivity) — possibly with conflicts blocking the finalization. Their decisions
-  were never soft-deleted, so activating one is a clean resume; new ephemerals
-  accumulate in a fresh bucket and the next complete_intent distills only the new work.`,
+  never soft-deleted).`,
   inputSchema: activateIntentSchema,
   handler: activateIntent,
 }
