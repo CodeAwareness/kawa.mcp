@@ -2,7 +2,7 @@
 /**
  * kawacode-on-stop — Claude Code Stop hook dispatcher.
  *
- * Fires two independent, fail-soft jobs at the end of every turn:
+ * Fires three independent, fail-soft jobs at the end of every turn:
  *
  * 1. Thought capture (opt out: KAWA_THOUGHT_CAPTURE=off) — two IPCs to Muninn:
  *      a. capture-thoughts:capture { sessionId, transcriptPath, cwd }
@@ -30,6 +30,26 @@
  *          turn stays open until the agent addresses it — but only when
  *          stop_hook_active is not already set, so we never loop the block.
  *
+ * 3. complete_intent hard gate (opt out: KAWA_COMPLETE_GATE=off) — blocks the
+ *      turn when the agent ran `git commit` under an active intent but never
+ *      finalized it with complete_intent, so distillation + code-block
+ *      auto-capture aren't silently skipped. Detection is pure Claude Code
+ *      transcript introspection (the hook's job, not Muninn's): scan for the
+ *      last CONFIRMED `git commit` vs the last complete_intent tool_use. A
+ *      commit is confirmed only when its command invokes git commit AND its
+ *      tool_result carries git's `[<ref> <shorthash>]` success line — so a
+ *      command that merely mentions "git commit" as data (printf/heredoc) is
+ *      not misread as a commit. Gate only when a commit lands AFTER the most
+ *      recent complete_intent call (or with none after it) — a failed/attempted
+ *      complete_intent still counts as "tried", so conflict-resolution turns
+ *      are not nagged. Then confirm via intent:get-active that THIS session
+ *      still has an open current intent (supplies its id/title). Output mirrors
+ *      job 2: { decision:"block", reason } guarded by !stop_hook_active; once a
+ *      block has fired it degrades to additionalContext (block once, then
+ *      advise — never loop). Takes precedence over the collision report on the
+ *      turn it fires (finalizing the intent matters more; collisions re-surface
+ *      next turn).
+ *
  * Failure discipline: every error path exits 0. Claude Code's Stop hook must
  * never block the turn loop on capture/collision failure or Muninn being down.
  * This is the ONLY place fail-soft is allowed under the no-Muninn-independence
@@ -38,9 +58,11 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 
 import { connectToMuninn, request, disconnect } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
+import { detectUncompletedCommit } from './stop/uncompleted-commit.js'
 
 interface HookPayload {
   session_id?: string
@@ -146,10 +168,87 @@ async function runCollisionCheck(payload: HookPayload): Promise<string | null> {
   })
 }
 
+// ===== Job 3: complete_intent hard gate =====
+
+/** Read the transcript file and detect an uncompleted commit (fail-soft → false). */
+function scanTranscriptForUncompletedCommit(transcriptPath: string): boolean {
+  let raw: string
+  try {
+    raw = readFileSync(transcriptPath, 'utf8')
+  } catch {
+    return false
+  }
+  return detectUncompletedCommit(raw)
+}
+
+/** Current HEAD sha for `cwd`, or null if unavailable. */
+function gitHeadSha(cwd: string): string | null {
+  try {
+    return execSync('git rev-parse HEAD', { cwd, encoding: 'utf8', timeout: 5000, windowsHide: true }).trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The complete_intent hard gate. Returns the hook-protocol JSON to print
+ * (a block, or a degraded advisory), or null when there's nothing to gate /
+ * on any failure (fail-soft). Mirrors runCollisionCheck's output protocol.
+ */
+async function runCompleteGate(payload: HookPayload): Promise<string | null> {
+  if (process.env.KAWA_COMPLETE_GATE === 'off') return null
+  const cwd = payload.cwd
+  const transcriptPath = payload.transcript_path
+  if (!cwd || !transcriptPath) return null
+
+  // Cheap, IPC-free evidence first: did the agent commit without completing?
+  if (!scanTranscriptForUncompletedCommit(transcriptPath)) return null
+
+  let repoOrigin: string
+  try {
+    repoOrigin = resolveOrigin(undefined, cwd)
+  } catch {
+    return null // not a git repo / git unavailable — skip
+  }
+
+  // Confirm THIS session still has an open current intent (supplies id/title).
+  let res: { intent?: { id?: string; title?: string; status?: string } }
+  try {
+    res = await request('intent', 'get-active', { repoOrigin })
+  } catch {
+    return null // Muninn error/timeout — fail open, no gate
+  }
+  const intent = res?.intent
+  if (!intent?.id) return null // already finalized (completion clears current) or no intent in play
+  if ((intent.status || 'active') !== 'active') return null
+
+  const headSha = gitHeadSha(cwd)
+  const shaShort = headSha ? ` (${headSha.slice(0, 8)})` : ''
+  const title = intent.title ? `"${intent.title}"` : 'the active intent'
+  const call = `complete_intent(intentId="${intent.id}", status="committed"${headSha ? `, commitSha="${headSha}"` : ''})`
+  const reason =
+    `You committed${shaShort} under ${title} but didn't finalize it. Run ${call} so its ` +
+    `decisions distill and code blocks are captured. If this commit isn't meant to finalize the ` +
+    `intent, complete it with the correct status or surface it to the user.`
+
+  // Block-to-continue, unless we already blocked once this turn (avoid a loop).
+  if (payload.stop_hook_active !== true) {
+    return JSON.stringify({ decision: 'block', reason })
+  }
+  // Degrade to advisory so the turn can end after a single block.
+  return JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'Stop',
+      additionalContext: `Reminder — ${reason}`,
+    },
+  })
+}
+
 async function main(): Promise<void> {
   const captureOff = process.env.KAWA_THOUGHT_CAPTURE === 'off'
   const collisionOff = process.env.KAWA_STOP_COLLISION_CHECK === 'off'
-  if (captureOff && collisionOff) process.exit(0)
+  const gateOff = process.env.KAWA_COMPLETE_GATE === 'off'
+  if (captureOff && collisionOff && gateOff) process.exit(0)
 
   const raw = readStdin()
   if (!raw) process.exit(0)
@@ -190,18 +289,29 @@ async function main(): Promise<void> {
     )
   }
 
-  // Collision check — the only producer of hook-protocol stdout.
-  let collisionOutput: string | null = null
+  // Hook-protocol stdout producers, in precedence order. The complete_intent
+  // gate wins the turn it fires (finalizing the intent matters more than a
+  // collision advisory; collisions re-surface next turn). Only one JSON object
+  // may be written, so fall through to the collision report only when the gate
+  // produced nothing (the common case).
+  let output: string | null = null
   try {
-    collisionOutput = await runCollisionCheck(payload)
+    output = await runCompleteGate(payload)
   } catch {
-    collisionOutput = null // belt-and-suspenders fail-soft
+    output = null // belt-and-suspenders fail-soft
+  }
+  if (!output) {
+    try {
+      output = await runCollisionCheck(payload)
+    } catch {
+      output = null
+    }
   }
 
   if (captureTasks.length > 0) await Promise.allSettled(captureTasks)
 
   disconnect()
-  if (collisionOutput) process.stdout.write(collisionOutput + '\n')
+  if (output) process.stdout.write(output + '\n')
   process.exit(0)
 }
 
