@@ -190,8 +190,9 @@ function formatBlockMessage(target: ResolvedTarget, res: EvaluateResponse): stri
 
   lines.push('')
   lines.push('Override options:')
-  lines.push('  1) record_decision(type:"fork", supersedes:[<id>], rationale:"...") then retry the Edit.')
-  lines.push('  2) Add `force: true` to the Edit args as a one-off escape hatch (acks the surfaced decisions for this session).')
+  lines.push('  1) record_decision(type:"fork", supersedes:[<id>], rationale:"...") then retry the Edit — persistent (records lineage across sessions).')
+  const ackIds = decisions.map(d => `"${d.decisionId}"`).join(', ')
+  lines.push(`  2) pre_edit_acknowledge({ decisionIds: [${ackIds}] }) to override for THIS session, then retry the Edit.`)
   return lines.join('\n')
 }
 

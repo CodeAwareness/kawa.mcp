@@ -9,6 +9,8 @@ Guidance for Claude Code when working in this repository.
 
 ## Workflow — run on every non-trivial turn
 
+> **Recall before you explore — every turn, including questions and investigation.** On a new request in an indexed sub-project, your *first* tool call is `get_relevant_context` (paraphrase the ask + name any files you already know) — **before** the first Read/Grep/Bash/Explore, not after. The common failure this prevents: opening a turn with search and never pulling prior decisions. `check_active_intent` is secondary (only when you may edit).
+
 1. **Check active intent** — `check_active_intent` (kawa-intents MCP). Resume if one exists.
 2. **Get relevant context** — `get_relevant_context` with a task description. Past decisions and related intents inform the approach.
 3. **Now** explore code, read files, plan.
