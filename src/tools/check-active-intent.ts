@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
+import { emitInjection, estimateTokens } from '../telemetry.js'
 
 export const checkActiveIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
@@ -77,25 +78,38 @@ export async function checkActiveIntent(input: CheckActiveIntentInput): Promise<
     : []
 
   const intent = res.intent
+  let response: ActiveIntentResponse
   if (!intent) {
-    return { hasActiveIntent: false, activeIntents }
-  }
-
-  return {
-    hasActiveIntent: true,
-    activeIntents,
-    intent: {
-      id: intent.id || res.intentId || '',
-      title: intent.title || '',
-      description: intent.description || '',
-      templateType: (intent.templateType || 'feature') as 'feature' | 'refactor' | 'exploration',
-      constraints: intent.constraints || [],
-      status: intent.status || 'active',
-      branch: intent.branch || '',
-      forkedFrom: intent.forkedFrom,
-      blocks: [] // Blocks are tracked separately by intent-block service
+    response = { hasActiveIntent: false, activeIntents }
+  } else {
+    response = {
+      hasActiveIntent: true,
+      activeIntents,
+      intent: {
+        id: intent.id || res.intentId || '',
+        title: intent.title || '',
+        description: intent.description || '',
+        templateType: (intent.templateType || 'feature') as 'feature' | 'refactor' | 'exploration',
+        constraints: intent.constraints || [],
+        status: intent.status || 'active',
+        branch: intent.branch || '',
+        forkedFrom: intent.forkedFrom,
+        blocks: [] // Blocks are tracked separately by intent-block service
+      }
     }
   }
+
+  // Track-B injection telemetry (VALUE_METRICS Phase 2): size the serialized
+  // result (≈ chars/4); itemCount = active-set size + 1 if this session has a
+  // current intent. Fire-and-forget — never blocks the tool result.
+  void emitInjection({
+    type: 'check_active',
+    tokensEst: estimateTokens(JSON.stringify(response)),
+    itemCount: activeIntents.length + (intent ? 1 : 0),
+    repoOrigin: actualOrigin,
+  })
+
+  return response
 }
 
 export const checkActiveIntentTool = {

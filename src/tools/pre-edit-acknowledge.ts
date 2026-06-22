@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 import { request, SESSION_ID } from '../services/muninn-ipc.js'
 import { forkFieldsExtensions } from './_fork-fields.js'
+import { resolveOrigin } from './resolve-origin.js'
+import { emitActedOn } from '../telemetry.js'
 
 /**
  * Thin proxy to Muninn's `pre-edit-cache:add` handler.
@@ -21,6 +23,14 @@ export const preEditAcknowledgeSchema = z.object({
     .string()
     .optional()
     .describe('Session scope for the force-override cache. Should match the sessionToken passed to pre_edit_decision_check. Defaults to the MCP server\'s SESSION_ID.'),
+  repoOrigin: z
+    .string()
+    .optional()
+    .describe('Git remote origin URL. Auto-detected from repoPath via git if not provided. Used only to attribute the acted-on value-metric to a repo.'),
+  repoPath: z
+    .string()
+    .optional()
+    .describe('Local path to the repository root. Enables repo attribution of the acted-on value-metric.'),
   ...forkFieldsExtensions,
 })
 
@@ -39,6 +49,18 @@ export async function preEditAcknowledge(
     sessionToken,
     decisionIds: input.decisionIds,
   })
+
+  // Track-B acted-on (VALUE_METRICS Phase 2): an explicit acknowledge IS the
+  // agent acting on the surfaced pre_edit reasoning — one signal per decision
+  // id. Only attributable to a repo when an origin can be resolved (this tool
+  // is repo-agnostic by default); fire-and-forget, never blocks the result.
+  if (input.repoOrigin || input.repoPath) {
+    try {
+      const origin = resolveOrigin(input.repoOrigin, input.repoPath!)
+      void Promise.allSettled(input.decisionIds.map(id => emitActedOn({ type: 'pre_edit', refId: id, repoOrigin: origin })))
+    } catch { /* origin unresolvable — skip attribution */ }
+  }
+
   return {
     acknowledged: typeof res?.added === 'number' ? res.added : 0,
     cacheSize: typeof res?.total === 'number' ? res.total : 0,

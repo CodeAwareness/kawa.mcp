@@ -35,6 +35,7 @@ import { readFileSync } from 'node:fs'
 import { connectToMuninn, request, disconnect } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { resolvePaths } from './pre-edit/path-resolve.js'
+import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
 
 interface HookPayload {
   session_id?: string
@@ -248,9 +249,9 @@ async function main(): Promise<void> {
 
   if (res?.recommendation === 'investigate-upstream') {
     const force = payload.tool_input?.force === true
+    const ids = (res.decisions ?? []).map(d => d.decisionId).filter(Boolean)
     if (force) {
       // Acknowledge surfaced decisions for this session, then allow.
-      const ids = (res.decisions ?? []).map(d => d.decisionId).filter(Boolean)
       if (ids.length > 0) {
         try {
           await request('pre-edit-cache', 'add', {
@@ -261,23 +262,44 @@ async function main(): Promise<void> {
           /* best-effort */
         }
       }
+      // Track-B acted-on (VALUE_METRICS Phase 2): the agent consciously
+      // overrode the surfaced reasoning — it acted on the pre_edit injection.
+      // One signal per surfaced decision id (refId), origin in hand here.
+      try {
+        await Promise.allSettled(ids.map(id => emitActedOn({ type: 'pre_edit', refId: id, repoOrigin })))
+      } catch { /* fire-and-forget */ }
       disconnect()
       process.exit(0)
     }
     // Block: exit 2 with stderr message. Claude Code surfaces it to the user.
-    process.stderr.write(formatBlockMessage(target, res) + '\n')
+    const blockMsg = formatBlockMessage(target, res)
+    process.stderr.write(blockMsg + '\n')
+    // Track-B injection (VALUE_METRICS Phase 2): size the injected block.
+    try {
+      await emitInjection({ type: 'pre_edit', tokensEst: estimateTokens(blockMsg), itemCount: ids.length, repoOrigin })
+    } catch { /* fire-and-forget */ }
     disconnect()
     process.exit(2)
   }
 
   if (res?.recommendation === 'review') {
+    const advisory = formatBlockMessage(target, res)
     const out = {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        additionalContext: formatBlockMessage(target, res),
+        additionalContext: advisory,
       },
     }
     process.stdout.write(JSON.stringify(out) + '\n')
+    // Track-B injection (VALUE_METRICS Phase 2): size the injected advisory.
+    try {
+      await emitInjection({
+        type: 'pre_edit',
+        tokensEst: estimateTokens(advisory),
+        itemCount: (res.decisions ?? []).length,
+        repoOrigin,
+      })
+    } catch { /* fire-and-forget */ }
     disconnect()
     process.exit(0)
   }

@@ -109,3 +109,69 @@ export function detectUncompletedCommit(transcriptText: string): boolean {
   if (lastCommitIdx === -1) return false
   return lastCommitIdx > lastCompleteIdx
 }
+
+/**
+ * Gate-SAVE detection (VALUE_METRICS.md V8): the inverse of an uncompleted
+ * commit — a CONFIRMED `git commit` exists AND a complete_intent call lands at
+ * or after it (the commit was finalized). Used at the Stop hook to emit the
+ * acted-on signal only when a prior gate block held the turn open
+ * (`stop_hook_active`) and the agent then completed the intent — i.e. the gate
+ * preceded a completion that would otherwise have skipped distillation +
+ * block auto-capture.
+ *
+ * Mirrors detectUncompletedCommit's parsing exactly (a commit counts only when
+ * its tool_result carries the commit-success signature, per decision 64b340d8 —
+ * a command merely MENTIONING "git commit" does not count) and flips the final
+ * position comparison.
+ *
+ * Correlation, not causation: this says "a completion followed a confirmed
+ * commit while the turn was held open", not "the gate caused the completion".
+ */
+export function detectGateSave(transcriptText: string): boolean {
+  const lines = transcriptText.split('\n')
+  const commits: { idx: number; id: string | undefined }[] = []
+  const results = new Map<string, { isError: boolean; text: string }>()
+  let lastCompleteIdx = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i].trim()
+    if (!ln) continue
+    let obj: any
+    try {
+      obj = JSON.parse(ln)
+    } catch {
+      continue
+    }
+    const content = obj?.message?.content
+    if (!Array.isArray(content)) continue
+
+    for (const item of content) {
+      if (item?.type === 'tool_use') {
+        const name: string = item.name || ''
+        if (/complete_intent/.test(name)) {
+          lastCompleteIdx = i
+        } else if (isGitCommitCommand(name, item?.input?.command || '')) {
+          commits.push({ idx: i, id: item.id })
+        }
+      } else if (item?.type === 'tool_result' && item.tool_use_id) {
+        results.set(item.tool_use_id, {
+          isError: item.is_error === true,
+          text: toolResultText(item.content),
+        })
+      }
+    }
+  }
+
+  let lastCommitIdx = -1
+  for (const c of commits) {
+    if (!c.id) continue
+    const r = results.get(c.id)
+    if (!r || r.isError) continue
+    if (!looksLikeCommitOutput(r.text)) continue
+    if (c.idx > lastCommitIdx) lastCommitIdx = c.idx
+  }
+
+  if (lastCommitIdx === -1) return false
+  // A complete_intent at or after the last confirmed commit = the commit is finalized.
+  return lastCompleteIdx >= lastCommitIdx
+}

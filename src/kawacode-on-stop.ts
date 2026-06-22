@@ -62,7 +62,8 @@ import { execSync } from 'node:child_process'
 
 import { connectToMuninn, request, disconnect } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
-import { detectUncompletedCommit } from './stop/uncompleted-commit.js'
+import { detectUncompletedCommit, detectGateSave } from './stop/uncompleted-commit.js'
+import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
 
 interface HookPayload {
   session_id?: string
@@ -150,6 +151,13 @@ async function runCollisionCheck(payload: HookPayload): Promise<string | null> {
 
   const report = formatCollisionReport(collisions)
 
+  // Track-B injection (VALUE_METRICS Phase 2): size the collision report the
+  // hook is about to inject (block or advisory both inject `report`).
+  // Fire-and-forget; awaited so the socket write flushes before disconnect.
+  try {
+    await emitInjection({ type: 'stop_collision', tokensEst: estimateTokens(report), itemCount: collisions.length, repoOrigin })
+  } catch { /* fire-and-forget */ }
+
   // Block-to-continue only when the per-repo setting is on AND we're not already
   // inside a prior block (else the turn can never end).
   if (res?.mode === 'block' && payload.stop_hook_active !== true) {
@@ -231,6 +239,12 @@ async function runCompleteGate(payload: HookPayload): Promise<string | null> {
     `decisions distill and code blocks are captured. If this commit isn't meant to finalize the ` +
     `intent, complete it with the correct status or surface it to the user.`
 
+  // Track-B injection (VALUE_METRICS Phase 2): size the gate reason the hook is
+  // about to inject (block or degraded advisory both inject `reason`).
+  try {
+    await emitInjection({ type: 'stop_gate', tokensEst: estimateTokens(reason), itemCount: 1, repoOrigin })
+  } catch { /* fire-and-forget */ }
+
   // Block-to-continue, unless we already blocked once this turn (avoid a loop).
   if (payload.stop_hook_active !== true) {
     return JSON.stringify({ decision: 'block', reason })
@@ -242,6 +256,40 @@ async function runCompleteGate(payload: HookPayload): Promise<string | null> {
       additionalContext: `Reminder — ${reason}`,
     },
   })
+}
+
+/**
+ * Gate-SAVE acted-on signal (VALUE_METRICS V8 / R2). Emits acted_on{stop_gate}
+ * when a prior Stop block held the turn open (`stop_hook_active`) AND the
+ * transcript now shows a confirmed commit finalized by a complete_intent — i.e.
+ * the gate preceded a completion that would otherwise have skipped distillation
+ * + block auto-capture. Fire-and-forget; returns its emit promise so main() can
+ * flush it before disconnect. Correlation, not causation.
+ */
+async function emitGateSaveSignal(payload: HookPayload): Promise<void> {
+  if (process.env.KAWA_COMPLETE_GATE === 'off') return
+  if (payload.stop_hook_active !== true) return // only after a block held the turn open
+  const cwd = payload.cwd
+  const transcriptPath = payload.transcript_path
+  if (!cwd || !transcriptPath) return
+
+  let raw: string
+  try {
+    raw = readFileSync(transcriptPath, 'utf8')
+  } catch {
+    return
+  }
+  if (!detectGateSave(raw)) return
+
+  let repoOrigin: string
+  try {
+    repoOrigin = resolveOrigin(undefined, cwd)
+  } catch {
+    return
+  }
+  try {
+    await emitActedOn({ type: 'stop_gate', repoOrigin })
+  } catch { /* fire-and-forget */ }
 }
 
 async function main(): Promise<void> {
@@ -273,8 +321,11 @@ async function main(): Promise<void> {
     process.exit(0)
   }
 
-  // Thought capture (fire-and-forget; each IPC tolerant of the other's failure).
+  // Fire-and-forget side tasks awaited before disconnect so their socket writes
+  // flush. Includes thought capture (below) and the Track-B gate-save acted-on
+  // signal (VALUE_METRICS Phase 2).
   const captureTasks: Promise<unknown>[] = []
+  captureTasks.push(emitGateSaveSignal(payload))
   if (!captureOff && sessionId && transcriptPath) {
     captureTasks.push(
       request('capture-thoughts', 'capture', {

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  detectGateSave,
   detectUncompletedCommit,
   isGitCommitCommand,
   looksLikeCommitOutput,
@@ -125,5 +126,41 @@ test('detectUncompletedCommit', async (t) => {
   await t.test('garbage / non-JSON lines are skipped', () => {
     const t1 = ['', 'not json', bash('git commit -m "x"', 'c1'), result('c1', { text: COMMIT_OK })].join('\n')
     assert.equal(detectUncompletedCommit(t1), true)
+  })
+})
+
+test('detectGateSave (VALUE_METRICS V8 acted-on)', async (t) => {
+  await t.test('confirmed commit then complete_intent → true (the inverse of uncompleted)', () => {
+    const t1 = [bash('git commit -m "x"', 'c1'), result('c1', { text: COMMIT_OK }), toolUse(COMPLETE, 'k1'), result('k1')].join('\n')
+    assert.equal(detectGateSave(t1), true)
+  })
+
+  await t.test('confirmed commit with NO completion → false (gate would still fire, not a save)', () => {
+    const t1 = [bash('git commit -m "x"', 'c1'), result('c1', { text: COMMIT_OK })].join('\n')
+    assert.equal(detectGateSave(t1), false)
+  })
+
+  await t.test('no commit at all → false', () => {
+    const t1 = [toolUse(COMPLETE, 'k1'), result('k1')].join('\n')
+    assert.equal(detectGateSave(t1), false)
+  })
+
+  await t.test('command merely MENTIONS "git commit" then complete → false (no confirmed commit)', () => {
+    const printf = bash(`printf '%s' 'git commit -m x' > /tmp/f`, 'p1')
+    const t1 = [printf, result('p1', { text: '' }), toolUse(COMPLETE, 'k1'), result('k1')].join('\n')
+    assert.equal(detectGateSave(t1), false)
+  })
+
+  await t.test('complete BEFORE the last confirmed commit → false (commit not finalized)', () => {
+    const t1 = [
+      toolUse(COMPLETE, 'k1'), result('k1'),
+      bash('git commit -m "later"', 'c1'), result('c1', { text: COMMIT_OK }),
+    ].join('\n')
+    assert.equal(detectGateSave(t1), false)
+  })
+
+  await t.test('failed commit (is_error) then complete → false', () => {
+    const t1 = [bash('git commit -m "x"', 'c1'), result('c1', { isError: true, text: 'fatal' }), toolUse(COMPLETE, 'k1'), result('k1')].join('\n')
+    assert.equal(detectGateSave(t1), false)
   })
 })

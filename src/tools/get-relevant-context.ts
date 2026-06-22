@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
+import { emitInjection, estimateTokens } from '../telemetry.js'
 
 export const getRelevantContextSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
@@ -84,7 +85,7 @@ export async function getRelevantContext(input: GetRelevantContextInput): Promis
     return { ...EMPTY_RESPONSE(actualOrigin, input.repoPath), error: `Muninn unavailable: ${msg}` }
   }
 
-  return {
+  const response: GetRelevantContextResponse = {
     projectOrigin: actualOrigin,
     projectPath: input.repoPath,
 
@@ -119,6 +120,20 @@ export async function getRelevantContext(input: GetRelevantContextInput): Promis
       decisionsReturned: (res.decisions || []).length,
     }
   }
+
+  // Track-B injection telemetry (VALUE_METRICS Phase 2): size the serialized
+  // recall payload (≈ chars/4), itemCount = intents + decisions, and carry the
+  // surfaced decision ids for the read-side recall→supersedes "acted on" join.
+  // Fire-and-forget — never blocks the tool result.
+  void emitInjection({
+    type: 'recall',
+    tokensEst: estimateTokens(JSON.stringify(response)),
+    itemCount: response.relevantIntents.length + response.relevantDecisions.length,
+    repoOrigin: actualOrigin,
+    decisionIds: response.relevantDecisions.map(d => d.id).filter(Boolean),
+  })
+
+  return response
 }
 
 export const getRelevantContextTool = {
