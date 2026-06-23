@@ -20,6 +20,17 @@ Guidance for Claude Code when working in this repository.
 
 Skip the entire workflow for trivial one-liners (typos, obvious bugs) — just make the change.
 
+### Reuse before you build — and recall per sub-task, not just per turn
+
+Before creating any new component, store, or shared utility:
+
+1. **Search the codebase** (Grep/Explore) for an existing one — this is the *authoritative* existence check.
+2. **`get_relevant_context`** on that area — this surfaces *why* it exists and the prior decisions around it.
+
+`get_relevant_context` is semantic over **decisions and intents**, not a file index — an empty result is **not** proof the component doesn't exist. Always pair it with a codebase search before concluding you need to build something new.
+
+Recall is scoped to a sub-task, not blanket coverage for the session. When a request **expands into a new area mid-turn** (e.g. a small fix grows into adding a new helper or UI component), re-run recall for the *new* area before writing — an earlier recall for a different sub-task doesn't cover it. **Self-initiated additions you bundle onto the original ask are where this gets skipped most.**
+
 ---
 
 ## When to create an intent — vs skip
