@@ -20,9 +20,14 @@ export type CompleteIntentInput = z.infer<typeof completeIntentSchema>
 /**
  * One contradiction between a distilled proposed decision and an existing
  * standard decision in the repo. Surfaced when distillation produces decisions
- * that conflict with previously-recorded ones (PRD §5.2 step 5b / §7.2).
+ * that conflict with previously-recorded ones. Since COMPLETION_CONFLICT_DECOUPLE.md
+ * these no longer block completion — the commit (status + blocks) already landed;
+ * each conflicting decision is *parked* for an async disposition in the
+ * Orchestration panel (supersede / keep-both / reject).
  */
 export interface ConflictMatch {
+  /** Stable distillation id of the proposed decision; the panel keys the disposition on it. */
+  proposedDecisionId?: string
   proposedDecisionSummary: string
   proposedDecisionRationale: string
   conflictsWith: {
@@ -72,20 +77,19 @@ export interface CompleteIntentResponse {
    */
   committedDecisionCount?: number
   /**
-   * Non-empty when the proposed-decision distillation contradicted existing
-   * standard decisions. Each entry pairs the proposed decision with the
-   * specific standard decision it contradicts, so the agent can surface the
-   * pair to the user. When conflicts is non-empty, success=false and
-   * newStatus stays "active" — the user resolves and retries.
+   * Non-empty when distillation produced decisions that contradict existing
+   * standards. Since COMPLETION_CONFLICT_DECOUPLE.md the completion still
+   * SUCCEEDED (success=true, status flipped, blocks captured) — these decisions
+   * are *deferred*: parked for an async disposition in the Orchestration panel
+   * (supersede / keep-both / reject). There is nothing to retry.
    */
-  conflicts?: ConflictMatch[]
+  deferredConflicts?: ConflictMatch[]
   /**
-   * Set when success=false to discriminate between:
-   *  - "conflicts" → see `conflicts[]`
+   * Set when success=false to discriminate the failure mode:
    *  - "transient-failure" → distiller LLM call or /check-conflicts API errored;
    *     `failedStage` and `error` carry diagnostics, the user retries.
    */
-  reason?: 'conflicts' | 'transient-failure'
+  reason?: 'transient-failure'
   failedStage?: string
   error?: string
   /**
@@ -139,47 +143,20 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   const intentTitle = res.intentTitle || 'Intent'
   const previousStatus = res.previousStatus || 'active'
   const success = res.success !== false
-  const conflicts: ConflictMatch[] = Array.isArray(res.conflicts) ? res.conflicts : []
+  const deferredConflicts: ConflictMatch[] = Array.isArray(res.deferredConflicts) ? res.deferredConflicts : []
   const committedDecisionCount: number | undefined =
     typeof res.committedDecisionCount === 'number' ? res.committedDecisionCount : undefined
-  const reason: 'conflicts' | 'transient-failure' | undefined =
-    res.reason === 'conflicts' || res.reason === 'transient-failure' ? res.reason : undefined
+  const reason: 'transient-failure' | undefined =
+    res.reason === 'transient-failure' ? res.reason : undefined
   const apiSyncDeferred = res.apiSyncDeferred === true
   const completionCollisions: CompletionCollision[] = Array.isArray(res.collisions) ? res.collisions : []
 
-  // Branch on the four §7.2 / §7.3 outcome shapes — pick the message that
-  // tells the agent exactly what to surface to the user.
+  // Branch on the outcome shape — pick the message that tells the agent exactly
+  // what to surface to the user.
   let newStatus: string
   let message: string
 
-  if (!success && reason === 'conflicts') {
-    // PRD §5.2 step 5b — distilled decisions contradicted standards. No write,
-    // no transition, bucket preserved. The agent's job is to surface each
-    // conflict to the user and ask how to resolve.
-    newStatus = res.status || 'active'
-    const lines: string[] = [
-      `Cannot complete: ${conflicts.length} conflict(s) between proposed decisions and existing standards.`,
-      '',
-      'For each conflict below, surface BOTH sides side-by-side to the user and ask how to resolve.',
-      'Common resolution paths:',
-      '  (A) Record a superseding decision: record_decision(type="fork", supersedes=["<existing-decision-id>"], rationale=...). Then retry complete_intent.',
-      '  (B) Abandon the intent: complete_intent(status="abandoned"). Decisions are soft-deleted but recoverable via activate_intent.',
-      '  (C) Keep the intent active and continue working.',
-      '',
-      'DO NOT silently retry — every retry runs the distiller again and produces the same conflicts.',
-      '',
-    ]
-    conflicts.forEach((c, i) => {
-      lines.push(`[${i + 1}] Proposed: ${c.proposedDecisionSummary}`)
-      const cw = c.conflictsWith || ({} as ConflictMatch['conflictsWith'])
-      const author = cw.author ? ` by ${cw.author}` : ''
-      const intentPart = cw.intentTitle ? ` (intent: "${cw.intentTitle}")` : ''
-      lines.push(`    Conflicts with: ${cw.summary || cw.decisionId || '(unknown)'}${intentPart}${author}`)
-      if (c.description) lines.push(`    ${c.description}`)
-      lines.push('')
-    })
-    message = lines.join('\n')
-  } else if (!success && reason === 'transient-failure') {
+  if (!success && reason === 'transient-failure') {
     // Distiller LLM error or /check-conflicts API error. Bucket re-populated,
     // intent stays active. User decides whether to wait + retry or abandon.
     newStatus = res.status || 'active'
@@ -220,7 +197,13 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
           .map(c => `${c.label}${c.isAgent ? ' (agent)' : ''} on ${c.files.map(f => f.fpath).join(', ')}`)
           .join('; ')
       : ''
-    message = statusMsg + shaPart + distilledPart + deferredPart + collisionPart
+    // COMPLETION_CONFLICT_DECOUPLE.md: distilled decisions that conflicted with
+    // standards did NOT block the completion — they're parked for a disposition
+    // in the Orchestration panel. Surface the count; there is nothing to retry.
+    const deferredConflictPart = deferredConflicts.length > 0
+      ? ` — ${deferredConflicts.length} distilled decision(s) need a disposition in the Orchestration panel (supersede / keep-both / reject)`
+      : ''
+    message = statusMsg + shaPart + distilledPart + deferredPart + collisionPart + deferredConflictPart
   }
 
   return {
@@ -231,7 +214,7 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
     commitSha: input.commitSha,
     message,
     committedDecisionCount,
-    conflicts: conflicts.length > 0 ? conflicts : undefined,
+    deferredConflicts: deferredConflicts.length > 0 ? deferredConflicts : undefined,
     reason,
     failedStage: res.failedStage,
     error: res.error,
@@ -258,7 +241,7 @@ Status values:
 - "done": Work is fully complete
 - "abandoned": Work was discarded without committing
 
-REQUIRED: Inspect the response after calling this tool. Four outcomes:
+REQUIRED: Inspect the response after calling this tool. Three outcomes:
 
 1. response.success === true:
    The task is complete. Briefly acknowledge the commit and — if
@@ -272,33 +255,25 @@ REQUIRED: Inspect the response after calling this tool. Four outcomes:
    in-progress edits overlap the work you just completed — surface it as a
    coordination heads-up (who, and which files), naming response.collisions[].label
    and the files. It's advisory, not a failure; the completion still succeeded.
+   If response.deferredConflicts is non-empty, the distillation produced N
+   decisions that conflict with existing standards — the completion STILL
+   SUCCEEDED (the commit landed: status flipped, code blocks captured). Those
+   decisions are deferred: parked for a disposition in the Orchestration panel,
+   where the user picks per decision: supersede the standard, keep both (records
+   a "contradicts" edge for a deliberate divergence / false positive), or reject
+   the distilled decision. Tell the user "N decision(s) need a disposition in
+   the panel." There is NOTHING to retry — do NOT re-run complete_intent.
 
-2. response.success === false AND response.conflicts is non-empty:
-   The distillation produced decisions that contradict existing standards in
-   this repo. Status stays "active" and NO decisions were written.
-   Surface EACH conflict to the user with the proposed decision and the
-   conflicting standard decision side-by-side. Then ask the user how to
-   resolve. Common options to suggest:
-     (A) Record a superseding decision via record_decision(type="fork",
-         supersedes=["<existing-decision-id>"], rationale=...). Then retry
-         complete_intent — the distiller may now find the new superseding
-         decision in recall and the conflict resolves.
-     (B) Abandon the intent: complete_intent(status="abandoned"). Decisions
-         are soft-deleted but recoverable via activate_intent if the user
-         changes their mind.
-     (C) Keep the intent active and continue working.
-   DO NOT silently retry — every retry runs the distiller (and the per-pair
-   judge) again. Wait for the user's decision.
-
-3. response.success === false AND response.reason === "transient-failure":
+2. response.success === false AND response.reason === "transient-failure":
    The distiller LLM call or the conflict-check API call errored. The
    ephemerals are preserved (the bucket is intact), and the intent stays
    "active". Tell the user the failure stage (response.failedStage) and the
    underlying error, then suggest retrying once the issue clears, or
    abandoning if the failure persists.
 
-4. In a non-interactive (autonomous) session: log the conflicts at WARN level
-   and leave the intent active. A human review path exists via the panel.`,
+3. In a non-interactive (autonomous) session: if response.deferredConflicts is
+   non-empty, log it at INFO and continue — the commit already landed and the
+   decisions await disposition in the panel. There is no blocking state.`,
   inputSchema: completeIntentSchema,
   handler: completeIntent
 }

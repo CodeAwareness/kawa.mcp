@@ -1,6 +1,6 @@
 {
   "name": "@kawacode/mcp",
-  "version": "6.7.0",
+  "version": "6.8.0",
   "description": "Team-aware memory for Claude Code, Cursor, and other AI coding assistants — intent tracking, decision history, real-time team conflict detection.",
   "main": "build/index.js",
   "bin": {
