@@ -61,6 +61,23 @@ let connectionPromise: Promise<void> | null = null
 const pendingRequests = new Map<string, PendingRequest>()
 
 /**
+ * Quiet mode: suppresses connection-lifecycle info logging (connect,
+ * handshake, close). Hook dispatchers enable it because Claude Code surfaces
+ * hook stderr to the agent/user on exit-2 blocks — the handshake chatter
+ * pollutes the actual message. Genuine error logs are never suppressed.
+ * The stdio MCP server leaves this off; its stderr feeds the MCP log view.
+ */
+let quiet = false
+
+export function setQuiet(value: boolean): void {
+  quiet = value
+}
+
+function logInfo(message: string): void {
+  if (!quiet) console.error(message)
+}
+
+/**
  * Get the default Muninn socket path for the current platform.
  */
 function getDefaultMuninnSocketPath(): string {
@@ -101,7 +118,7 @@ function _connectToMuninn(socketPath?: string): Promise<void> {
   const targetPath = socketPath || process.env.MUNINN_SOCKET || getDefaultMuninnSocketPath()
 
   return new Promise((resolve, reject) => {
-    console.error(`[MuninnIPC] Connecting to Muninn catalog at ${targetPath}...`)
+    logInfo(`[MuninnIPC] Connecting to Muninn catalog at ${targetPath}...`)
 
     const catalogSock = net.createConnection(targetPath, () => {
       // Send extension handshake
@@ -142,7 +159,7 @@ function _connectToMuninn(socketPath?: string): Promise<void> {
               // Windows two-pipe protocol: catalog pipe only handles registration.
               // Muninn sends back a dedicated client pipe path; connect to it for I/O.
               switchedToClientPipe = true
-              console.error(`[MuninnIPC] Handshake complete (caw=${cawId}), connecting to ${pipePath}`)
+              logInfo(`[MuninnIPC] Handshake complete (caw=${cawId}), connecting to ${pipePath}`)
               catalogSock.destroy()
               // Small delay so Muninn's thread has time to start the client pipe server
               setTimeout(() => connectClientPipe(pipePath, resolve, reject), 50)
@@ -150,7 +167,7 @@ function _connectToMuninn(socketPath?: string): Promise<void> {
               // Unix: single persistent connection, keep using catalogSock
               socket = catalogSock
               connected = true
-              console.error(`[MuninnIPC] Handshake complete (caw=${cawId})`)
+              logInfo(`[MuninnIPC] Handshake complete (caw=${cawId})`)
               resolve()
             }
             continue
@@ -179,7 +196,7 @@ function _connectToMuninn(socketPath?: string): Promise<void> {
       // On Windows the catalog pipe closes after handshake — expected, skip cleanup.
       // On Unix the catalog socket IS the main socket, so closing means disconnected.
       if (!switchedToClientPipe) {
-        console.error('[MuninnIPC] Socket closed')
+        logInfo('[MuninnIPC] Socket closed')
         cleanup()
       }
     })
@@ -204,12 +221,12 @@ function connectClientPipe(
   resolve: () => void,
   reject: (err: Error) => void
 ): void {
-  console.error(`[MuninnIPC] Connecting to client pipe: ${pipePath}`)
+  logInfo(`[MuninnIPC] Connecting to client pipe: ${pipePath}`)
 
   const clientSock = net.createConnection(pipePath, () => {
     socket = clientSock
     connected = true
-    console.error('[MuninnIPC] Client pipe connected')
+    logInfo('[MuninnIPC] Client pipe connected')
     resolve()
   })
 
@@ -234,7 +251,7 @@ function connectClientPipe(
   })
 
   clientSock.on('close', () => {
-    console.error('[MuninnIPC] Client pipe closed')
+    logInfo('[MuninnIPC] Client pipe closed')
     cleanup()
   })
 }

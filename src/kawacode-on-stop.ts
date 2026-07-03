@@ -60,10 +60,14 @@
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 
-import { connectToMuninn, request, disconnect } from './services/muninn-ipc.js'
+import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { detectUncompletedCommit, detectGateSave } from './stop/uncompleted-commit.js'
 import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
+
+// Same rationale as kawacode-on-pre-edit: hook stderr can surface to the
+// agent/user — suppress IPC lifecycle chatter. KAWA_DEBUG=1 restores it.
+setQuiet(!process.env.KAWA_DEBUG)
 
 interface HookPayload {
   session_id?: string

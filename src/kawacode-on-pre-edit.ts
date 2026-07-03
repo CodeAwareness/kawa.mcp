@@ -32,10 +32,15 @@
 
 import { readFileSync } from 'node:fs'
 
-import { connectToMuninn, request, disconnect } from './services/muninn-ipc.js'
+import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { resolvePaths } from './pre-edit/path-resolve.js'
 import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
+
+// Hook stderr is surfaced to the agent/user on exit-2 blocks — suppress the
+// IPC lifecycle chatter so only the decision-check message comes through.
+// KAWA_DEBUG=1 restores full logging for troubleshooting.
+setQuiet(!process.env.KAWA_DEBUG)
 
 interface HookPayload {
   session_id?: string
