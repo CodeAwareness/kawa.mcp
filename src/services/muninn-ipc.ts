@@ -355,19 +355,25 @@ export async function request(
 }
 
 /**
- * Ensure a repository path is registered with Muninn as a project.
+ * Ensure a repository path is registered as a project.
  *
- * Sends `code:add` with the folder path so Muninn activates the project,
- * sets up git state, and pulls intents/decisions from the API.
- * Always sends the request — Muninn's AddHandler is idempotent and
- * returns the existing project if already added.
- * Errors are logged but not thrown — repo registration is best-effort.
+ * Sends `code:add` with the folder path so the app activates the project,
+ * sets up git state, and pulls intents/decisions from the API. The handler
+ * is idempotent and returns the existing project if already added.
+ *
+ * A `code:add` failure arrives here as a rejected promise — `routeResponse`
+ * already rejects with the handler's real error on `success: false`. We must
+ * NOT swallow it: registration is a precondition for every repo-targeting
+ * tool, so a hidden failure lets the tool proceed and fail downstream with a
+ * misleading message (e.g. "No project open for this repo origin"). Re-throw
+ * with repo-path context; the dispatcher (index.ts) surfaces it to the caller
+ * as structured tool output so the real reason is visible.
  */
 export async function ensureRepo(repoPath: string): Promise<void> {
   try {
     await request('code', 'add', { folder: repoPath })
   } catch (err) {
-    console.error(`[MuninnIPC] ensureRepo failed for ${repoPath}: ${(err as Error).message}`)
+    throw new Error(`Could not register repository "${repoPath}" with Kawa Code: ${(err as Error).message}`)
   }
 }
 
