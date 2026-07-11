@@ -111,6 +111,22 @@ Disable telemetry with `KAWA_PRE_EDIT_TELEMETRY=off`.
 - **Zero-knowledge encryption** — code blocks encrypted client-side before sync. The Kawa cloud cannot decrypt your team's code.
 - **Cross-platform** — works with Claude Code, Cursor, and any MCP-compatible AI assistant.
 
+## Migrating or rewriting a codebase? Transplant its decisions
+
+When you port a codebase to a new language or rebuild it in a fresh repository, the code moves — but the *reasoning* usually doesn't. The source repo's decision history knows why retired approaches were retired, which constraints are load-bearing, and where the security landmines are. With Kawa Code, that history becomes a first-class migration input.
+
+Decisions are scoped per repository, so the new repo won't surface the old repo's history automatically. Transplant them slice by slice as you port — this is the **recall-transplant workflow**:
+
+1. **Recall before porting each slice.** Call `get_relevant_context` against the *source* repo with a description of the subsystem you're about to port (name its key files). This surfaces the forks, constraints, trade-offs, and discoveries that shaped it.
+2. **Expand what matters.** Recall returns summaries — call `get_decision_detail` on the load-bearing hits for the full rationale and consequences.
+3. **Classify: stack-portable vs stack-bound.** Domain truths port: protocol contracts, cost/scale rationale, security discoveries, "we tried X and retired it" warnings. Mechanics of the old stack don't: build-tooling quirks, runtime workarounds, library-specific fixes. Only the portable ones move.
+4. **Re-record the portable ones in the *target* repo** with `record_decision`, citing provenance in the summary or rationale (e.g. `[transplanted from <source-repo> <decision-id>]`). Merge decisions that form one lineage into a single record.
+5. **Let the transplants shape the port and its tests.** A transplanted durability rationale should become a test that proves the property survived the rewrite; a retired-approach warning should stop the new stack from reintroducing it.
+
+The payoff compounds: the port doesn't re-litigate settled arguments or faithfully reproduce old bugs, *negative knowledge* survives even though the code that motivated it was deleted long ago, and at cutover the new repo starts with a curated decision corpus instead of an empty one.
+
+The [CLAUDE.md template](./CLAUDE.md.example) ships a compact version of this workflow, so agents set up through the Kawa Code welcome flow follow it automatically.
+
 ## Development
 
 ```bash

@@ -31,6 +31,16 @@ Before creating any new component, store, or shared utility:
 
 Recall is scoped to a sub-task, not blanket coverage for the session. When a request **expands into a new area mid-turn** (e.g. a small fix grows into adding a new helper or UI component), re-run recall for the *new* area before writing — an earlier recall for a different sub-task doesn't cover it. **Self-initiated additions you bundle onto the original ask are where this gets skipped most.**
 
+### Migrations & rewrites — recall-transplant from the source repo
+
+When porting code from another repository (language port, rewrite, repo split), the source repo's decisions do NOT surface here automatically — recall is per-repo. Before porting each slice:
+
+1. `get_relevant_context` against the **source** repo (its `repoPath`), describing the subsystem being ported + its key files.
+2. `get_decision_detail` on the load-bearing hits.
+3. Transplant only **stack-portable** decisions (domain truths, protocol contracts, cost/scale rationale, security discoveries, retired-approach warnings) — not the old stack's tooling/runtime mechanics.
+4. `record_decision` them in **this** repo with provenance: `[transplanted from <source-repo> <decision-id>]`. Merge one-lineage decisions into a single record.
+5. Let transplanted rationale drive the port's tests (a durability guarantee becomes a test; a retired approach must not be reintroduced).
+
 ---
 
 ## When to create an intent — vs skip
