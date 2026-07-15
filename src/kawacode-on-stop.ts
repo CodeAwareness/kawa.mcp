@@ -42,11 +42,15 @@
  *      not misread as a commit. Gate only when a commit lands AFTER the most
  *      recent complete_intent call (or with none after it) — a failed/attempted
  *      complete_intent still counts as "tried", so conflict-resolution turns
- *      are not nagged. Then confirm via intent:get-active that THIS session
- *      still has an open current intent (supplies its id/title). Output mirrors
- *      job 2: { decision:"block", reason } guarded by !stop_hook_active; once a
- *      block has fired it degrades to additionalContext (block once, then
- *      advise — never loop). Takes precedence over the collision report on the
+ *      are not nagged. The gate attributes the commit to ITS OWN repo (parsed
+ *      from `git -C`/`cd` in the command, falling back to cwd), confirms via
+ *      intent:get-active that THIS session has an open current intent THERE,
+ *      skips entirely when a prior nag for this commit already sits in the
+ *      transcript (once per commit — never loop), and skips when the repo HEAD
+ *      is already claimed by a completed intent (intent:claimed-by-commit).
+ *      Output mirrors job 2: { decision:"block", reason } guarded by
+ *      !stop_hook_active; once a block has fired it degrades to
+ *      additionalContext. Takes precedence over the collision report on the
  *      turn it fires (finalizing the intent matters more; collisions re-surface
  *      next turn).
  *
@@ -59,10 +63,11 @@
 
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import { resolve as resolvePath } from 'node:path'
 
 import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
-import { detectUncompletedCommit, detectGateSave } from './stop/uncompleted-commit.js'
+import { lastUnfinalizedCommit, nagAlreadyInTranscript, extractCommitPath, detectGateSave } from './stop/uncompleted-commit.js'
 import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
 
 // Same rationale as kawacode-on-pre-edit: hook stderr can surface to the
@@ -182,21 +187,10 @@ async function runCollisionCheck(payload: HookPayload): Promise<string | null> {
 
 // ===== Job 3: complete_intent hard gate =====
 
-/** Read the transcript file and detect an uncompleted commit (fail-soft → false). */
-function scanTranscriptForUncompletedCommit(transcriptPath: string): boolean {
-  let raw: string
+/** Current HEAD sha for `dir`, or null if unavailable. */
+function gitHeadSha(dir: string): string | null {
   try {
-    raw = readFileSync(transcriptPath, 'utf8')
-  } catch {
-    return false
-  }
-  return detectUncompletedCommit(raw)
-}
-
-/** Current HEAD sha for `cwd`, or null if unavailable. */
-function gitHeadSha(cwd: string): string | null {
-  try {
-    return execSync('git rev-parse HEAD', { cwd, encoding: 'utf8', timeout: 5000, windowsHide: true }).trim()
+    return execSync('git rev-parse HEAD', { cwd: dir, encoding: 'utf8', timeout: 5000, windowsHide: true }).trim()
   } catch {
     return null
   }
@@ -206,6 +200,17 @@ function gitHeadSha(cwd: string): string | null {
  * The complete_intent hard gate. Returns the hook-protocol JSON to print
  * (a block, or a degraded advisory), or null when there's nothing to gate /
  * on any failure (fail-soft). Mirrors runCollisionCheck's output protocol.
+ *
+ * Loop-fix (2026-07-03) — three suppressions before any nag:
+ *  1. Repo-correct attribution: the gate targets the repo the COMMIT ran in
+ *     (parsed from `git -C` / `cd` in the command), not the payload cwd. A
+ *     commit in an intent-less repo (e.g. docs-only) silences naturally via
+ *     no-active-intent; a cross-repo commit gates against the right intent.
+ *  2. Once per commit: a prior nag after the commit in the transcript means
+ *     we already asked — block once, then silence, never loop.
+ *  3. Already claimed: when the target repo's HEAD is claimed by a
+ *     completed/pushed/done intent (any session), the commit IS finalized —
+ *     nothing to nag.
  */
 async function runCompleteGate(payload: HookPayload): Promise<string | null> {
   if (process.env.KAWA_COMPLETE_GATE === 'off') return null
@@ -214,16 +219,32 @@ async function runCompleteGate(payload: HookPayload): Promise<string | null> {
   if (!cwd || !transcriptPath) return null
 
   // Cheap, IPC-free evidence first: did the agent commit without completing?
-  if (!scanTranscriptForUncompletedCommit(transcriptPath)) return null
+  let transcript: string
+  try {
+    transcript = readFileSync(transcriptPath, 'utf8')
+  } catch {
+    return null
+  }
+  const commit = lastUnfinalizedCommit(transcript)
+  if (!commit) return null
+
+  // Suppression 2: we already nagged about this commit — block once, then silence.
+  if (nagAlreadyInTranscript(transcript, commit.lineIdx)) return null
+
+  // Suppression 1: attribute the commit to ITS repo. Fall back to cwd when the
+  // command doesn't state a path (the commit ran in the Bash session's cwd).
+  const cmdPath = extractCommitPath(commit.cmd)
+  const gateDir = cmdPath ? resolvePath(cwd, cmdPath) : cwd
 
   let repoOrigin: string
   try {
-    repoOrigin = resolveOrigin(undefined, cwd)
+    repoOrigin = resolveOrigin(undefined, gateDir)
   } catch {
     return null // not a git repo / git unavailable — skip
   }
 
-  // Confirm THIS session still has an open current intent (supplies id/title).
+  // Confirm THIS session still has an open current intent IN THE COMMIT'S REPO
+  // (supplies its id/title). Intent-less repos (docs) end here.
   let res: { intent?: { id?: string; title?: string; status?: string } }
   try {
     res = await request('intent', 'get-active', { repoOrigin })
@@ -234,9 +255,23 @@ async function runCompleteGate(payload: HookPayload): Promise<string | null> {
   if (!intent?.id) return null // already finalized (completion clears current) or no intent in play
   if ((intent.status || 'active') !== 'active') return null
 
-  const headSha = gitHeadSha(cwd)
+  const headSha = gitHeadSha(gateDir)
+
+  // Suppression 3: HEAD already claimed by a completed intent (any session).
+  // Failure discipline matches the rest of the gate: any error → no gate.
+  if (headSha) {
+    try {
+      const claim: { claimed?: boolean } = await request('intent', 'claimed-by-commit', { repoOrigin, sha: headSha })
+      if (claim?.claimed === true) return null
+    } catch {
+      return null
+    }
+  }
+
   const shaShort = headSha ? ` (${headSha.slice(0, 8)})` : ''
   const title = intent.title ? `"${intent.title}"` : 'the active intent'
+  // NOTE: this string carries the NAG_MARKER ('Run complete_intent(intentId=')
+  // that nagAlreadyInTranscript keys on — keep them in sync.
   const call = `complete_intent(intentId="${intent.id}", status="committed"${headSha ? `, commitSha="${headSha}"` : ''})`
   const reason =
     `You committed${shaShort} under ${title} but didn't finalize it. Run ${call} so its ` +

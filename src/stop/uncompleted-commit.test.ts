@@ -4,8 +4,12 @@ import assert from 'node:assert/strict'
 import {
   detectGateSave,
   detectUncompletedCommit,
+  extractCommitPath,
   isGitCommitCommand,
+  lastUnfinalizedCommit,
   looksLikeCommitOutput,
+  NAG_MARKER,
+  nagAlreadyInTranscript,
   toolResultText,
 } from './uncompleted-commit.js'
 
@@ -162,5 +166,91 @@ test('detectGateSave (VALUE_METRICS V8 acted-on)', async (t) => {
   await t.test('failed commit (is_error) then complete → false', () => {
     const t1 = [bash('git commit -m "x"', 'c1'), result('c1', { isError: true, text: 'fatal' }), toolUse(COMPLETE, 'k1'), result('k1')].join('\n')
     assert.equal(detectGateSave(t1), false)
+  })
+})
+
+// ---- loop-fix additions (2026-07-03) ----
+
+test('lastUnfinalizedCommit', async (t) => {
+  await t.test('returns cmd + shortSha + position of the unfinalized commit', () => {
+    const transcript = [
+      bash('cd /repos/docs && git add A.md && git commit -m "docs"', 'c1'),
+      result('c1', { text: '[main ac376bd] docs' }),
+    ].join('\n')
+    const c = lastUnfinalizedCommit(transcript)
+    assert.ok(c)
+    assert.equal(c!.shortSha, 'ac376bd')
+    assert.match(c!.cmd, /cd \/repos\/docs/)
+  })
+
+  await t.test('finalized commit → null', () => {
+    const transcript = [
+      bash('git commit -m "x"', 'c1'),
+      result('c1', { text: COMMIT_OK }),
+      toolUse(COMPLETE, 'k1'),
+    ].join('\n')
+    assert.equal(lastUnfinalizedCommit(transcript), null)
+  })
+
+  await t.test('unconfirmed commit (no success line) → null', () => {
+    const transcript = [
+      bash('git commit -m "x"', 'c1'),
+      result('c1', { text: 'nothing to commit, working tree clean' }),
+    ].join('\n')
+    assert.equal(lastUnfinalizedCommit(transcript), null)
+  })
+})
+
+test('extractCommitPath', async (t) => {
+  await t.test('git -C path', () =>
+    assert.equal(extractCommitPath('git -C /repos/api commit -am "x"'), '/repos/api'))
+  await t.test('leading cd && commit', () =>
+    assert.equal(extractCommitPath('cd /repos/docs && git add -A && git commit -m "x"'), '/repos/docs'))
+  await t.test('last cd before commit wins', () =>
+    assert.equal(extractCommitPath('cd /a && ls; cd /b && git commit -m "x"'), '/b'))
+  await t.test('quoted path unwrapped', () =>
+    assert.equal(extractCommitPath('cd "/repos/my docs" && git commit -m "x"'), '/repos/my docs'))
+  await t.test('git -C wins over cd', () =>
+    assert.equal(extractCommitPath('cd /a && git -C /b commit -m "x"'), '/b'))
+  await t.test('no path → null', () =>
+    assert.equal(extractCommitPath('git add -A && git commit -m "x"'), null))
+  await t.test('relative path returned as-is', () =>
+    assert.equal(extractCommitPath('cd kawa.dev-doc && git commit -m "x"'), 'kawa.dev-doc'))
+})
+
+test('nagAlreadyInTranscript', async (t) => {
+  const commitLine = bash('git commit -m "x"', 'c1')
+  const commitResult = result('c1', { text: COMMIT_OK })
+  const nagLine = JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [{ type: 'text', text: `Reminder — You committed but didn't finalize it. ${NAG_MARKER}"abc", status="committed")` }],
+    },
+  })
+
+  await t.test('nag after the commit → true (suppress)', () => {
+    const transcript = [commitLine, commitResult, nagLine].join('\n')
+    assert.equal(nagAlreadyInTranscript(transcript, 0), true)
+  })
+
+  await t.test('nag BEFORE the commit (older nag for an older commit) → false', () => {
+    const transcript = [nagLine, commitLine, commitResult].join('\n')
+    assert.equal(nagAlreadyInTranscript(transcript, 1), false)
+  })
+
+  await t.test('no nag at all → false', () => {
+    const transcript = [commitLine, commitResult].join('\n')
+    assert.equal(nagAlreadyInTranscript(transcript, 0), false)
+  })
+
+  await t.test('historical nag text (pre-marker era) still matches', () => {
+    // The marker phrase has been part of the nag wording since the gate shipped.
+    const legacy = JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: 'Run complete_intent(intentId="6a48", status="committed", commitSha="463f")' }] },
+    })
+    const transcript = [commitLine, commitResult, legacy].join('\n')
+    assert.equal(nagAlreadyInTranscript(transcript, 0), true)
   })
 })
