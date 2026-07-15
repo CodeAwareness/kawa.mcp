@@ -71,6 +71,7 @@ Use `--no-bump` when the version was already bumped in a prior commit — e.g. a
 
    That hex string is passed to `mcp-publisher login dns --domain kawacode.ai --private-key <hex> --algorithm ed25519`.
 8. **Registry publish** — `mcp-publisher publish` (reads `./server.json`).
+9. **Commit + tag** — once both publishes succeed, commits the version-bump files (`package.json` + `server.json`) as `chore: release vX.Y.Z` and creates an annotated `vX.Y.Z` tag. Idempotent: skips the commit when nothing is staged (e.g. `--no-bump` where the version was already committed) and skips the tag when it already exists. **Not pushed** — pushing is deliberate and separate: `git push && git push origin vX.Y.Z` when ready (push-only-when-asked). Only the version-bump files are staged, so unrelated uncommitted work is left untouched — commit feature code *before* deploying.
 
 ### Prerequisites (one-time setup)
 

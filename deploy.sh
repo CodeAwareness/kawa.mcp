@@ -93,4 +93,25 @@ mcp-publisher login dns --domain "$DOMAIN" --private-key "$PRIVATE_KEY_HEX" --al
 echo "==> Publishing to MCP Registry"
 mcp-publisher publish
 
+# Record the release in git now that both publishes have succeeded. Commit the
+# version-bump files and tag the release. Idempotent under `set -e`: skips the
+# commit when nothing is staged (e.g. --no-bump where the version was already
+# committed) and skips the tag when it already exists. NOT pushed — pushing is a
+# deliberate, separate step (push-only-when-asked).
+echo "==> Recording release in git ($NEW_VERSION)"
+git add package.json server.json
+if git diff --cached --quiet; then
+  echo "    Version files already committed — nothing to commit"
+else
+  git commit -m "chore: release $NEW_VERSION"
+  echo "    Committed: chore: release $NEW_VERSION"
+fi
+if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null; then
+  echo "    Tag $NEW_VERSION already exists — skipping"
+else
+  git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+  echo "    Tagged $NEW_VERSION"
+fi
+echo "    Not pushed. When ready: git push && git push origin $NEW_VERSION"
+
 echo "==> Done! Published @kawacode/mcp@$NEW_VERSION to npm + MCP Registry"
