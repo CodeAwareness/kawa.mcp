@@ -68,7 +68,7 @@ import { resolve as resolvePath } from 'node:path'
 import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { lastUnfinalizedCommit, nagAlreadyInTranscript, extractCommitPath, detectGateSave } from './stop/uncompleted-commit.js'
-import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
+import { emitInjection, emitActedOn, emitTurnEnd, estimateTokens } from './telemetry.js'
 
 // Same rationale as kawacode-on-pre-edit: hook stderr can surface to the
 // agent/user — suppress IPC lifecycle chatter. KAWA_DEBUG=1 restores it.
@@ -399,6 +399,13 @@ async function main(): Promise<void> {
   }
 
   if (captureTasks.length > 0) await Promise.allSettled(captureTasks)
+
+  // Close the telemetry turn (VALUE_METRICS Phase 2). Sent LAST — after this
+  // turn's stop_gate/stop_collision injections above have flushed (each awaited)
+  // — so they attribute to the closing turn and the next turn's first injection
+  // opens a fresh turnId. Muninn owns turnSeq; this is a thin fire-and-forget
+  // signal. Skipped when telemetry is off; harmless if no turn was ever opened.
+  await emitTurnEnd()
 
   disconnect()
   if (output) process.stdout.write(output + '\n')

@@ -101,3 +101,18 @@ export function emitActedOn(args: {
   if (args.refId) data.refId = args.refId
   return request('telemetry', 'acted_on', data).then(() => {}).catch(() => {})
 }
+
+/**
+ * Close the telemetry turn for this session (Stop hook). Muninn OWNS turnSeq and
+ * stamps the real turnId on injections; this signal just tells it the turn ended
+ * so the NEXT injection opens a fresh turnId. Keep-mcp-thin: no seq/state here.
+ *
+ * MUST be sent AFTER this turn's stop_gate/stop_collision injections have flushed
+ * so they attribute to the closing turn — the Stop hook awaits those emits first.
+ * No body needed: muninn-ipc stamps `_agentId = SESSION_ID`, which Muninn resolves
+ * to the same session key the injections used. Fire-and-forget.
+ */
+export function emitTurnEnd(): Promise<void> {
+  if (!enabled()) return Promise.resolve()
+  return request('telemetry', 'turn_end', {}).then(() => {}).catch(() => {})
+}
