@@ -53,6 +53,7 @@ export type RecordDecisionInput = z.infer<typeof recordDecisionSchema>
 export interface RecordDecisionResponse {
   recorded: boolean
   decisionId: string
+  error?: string
 }
 
 export async function recordDecision(input: RecordDecisionInput): Promise<RecordDecisionResponse> {
@@ -80,10 +81,25 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
     ...extractForkFields(input),
   })
 
-  return {
-    recorded: res.success !== false,
-    decisionId: res.decisionId || ''
+  // A persisted decision ALWAYS has an id. Anything else — an explicit
+  // failure, or a response that merely omits `decisionId` — means nothing was
+  // stored, and must be reported as a failure. The previous shaping
+  // (`recorded: res.success !== false`) reported success for any response that
+  // wasn't explicitly `success: false`, so a non-persisting call returned
+  // `{recorded: true, decisionId: ''}` and the caller silently lost the
+  // decision. Capture failures must be loud, never inferred from absence.
+  const decisionId = typeof res.decisionId === 'string' ? res.decisionId : ''
+  if (res.success === false || !decisionId) {
+    return {
+      recorded: false,
+      decisionId: '',
+      error:
+        res.error ||
+        'The decision was NOT saved (Kawa Code returned no decision id). Nothing has been persisted — re-send this decision, and if it fails again report the failure rather than assuming it was captured.',
+    }
   }
+
+  return { recorded: true, decisionId }
 }
 
 export const recordDecisionTool = {
