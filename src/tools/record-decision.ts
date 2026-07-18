@@ -34,6 +34,8 @@ export const recordDecisionSchema = z.object({
     .describe('Thought-chain entry IDs this record was extracted from. Only set by the extractor path.'),
   appliesWhen: z.string().optional()
     .describe('Trigger condition / "How to apply" — populate ONLY when the decision is plainly conditional (e.g. "language is Go", "when running in production", "when working in module X", "when the error is ECONNRESET"). Skip when the rule has no clean activation condition or when the rationale already implies universality. Treat applies_when as load-bearing context the LLM uses at recall time to decide whether the decision is relevant — not a soft hint. Strong-signal-only.'),
+  surface: z.array(z.enum(['pre-edit', 'intent-create', 'stop', 'recall'])).optional()
+    .describe('Which ceremony(ies) this decision should be surfaced at, controlling when it interrupts future work. Values: "pre-edit" (per-edit block via pre_edit_decision_check — for correctness/security constraints), "intent-create" (injected at intent-framing time — for design/scalability constraints that must shape the approach, not a keystroke), "stop" (once-per-turn Stop/review gate — aggregate/after-the-fact checks), "recall" (passive; only via get_relevant_context). Omit for ordinary decisions — empty means default type-based routing. Strong-signal-only: set it only when the decision genuinely belongs at a non-default ceremony.'),
   resolvedCollision: z.object({
     peerUid: z.string().describe('The colliding peer (HAI) uid — the collision.uid from the resolution_required response.'),
     peerLabel: z.string().optional().describe('Human-readable peer label, if known.'),
@@ -73,6 +75,7 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
     confidence: input.confidence,
     sourceThoughtIds: input.sourceThoughtIds || [],
     appliesWhen: input.appliesWhen,
+    surface: input.surface,
     resolvedCollision: input.resolvedCollision,
     ...extractForkFields(input),
   })

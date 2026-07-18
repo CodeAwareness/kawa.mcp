@@ -24,6 +24,7 @@ export interface DecisionDetail {
   consequences?: string
   symptom?: string
   appliesWhen?: string | null
+  surface?: string[] | null
   relatedFiles: string[]
   supersedes: string[]
   constraintsChecked: string[]
@@ -64,6 +65,7 @@ export async function getDecisionDetail(input: GetDecisionDetailInput): Promise<
       consequences: d.consequences,
       symptom: d.symptom,
       appliesWhen: d.appliesWhen ?? d.applies_when ?? d.aw ?? null,
+      surface: d.surface ?? d.sf ?? null,
       relatedFiles: d.relatedFiles || d.related_files || [],
       supersedes: d.supersedes || [],
       constraintsChecked: d.constraintsChecked || d.constraints_checked || [],
@@ -82,7 +84,7 @@ Recall surfaces (get_relevant_context, get_project_decisions, get_session_decisi
 Inputs:
 - \`decisionId\`: the decision to expand (the \`id\` / \`decisionId\` from a recall result).
 
-Returns the decision's \`rationale\`, \`context\`, \`consequences\`, \`alternatives\`, \`symptom\`, \`appliesWhen\`, and related metadata. \`found: false\` when the id is unknown in this repo.`,
+Returns the decision's \`rationale\`, \`context\`, \`consequences\`, \`alternatives\`, \`symptom\`, \`appliesWhen\`, \`surface\`, and related metadata. \`found: false\` when the id is unknown in this repo.`,
   inputSchema: getDecisionDetailSchema,
   handler: getDecisionDetail
 }

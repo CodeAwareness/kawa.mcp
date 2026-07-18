@@ -19,7 +19,9 @@ const decisionUpdatesSchema = z.object({
   constraintsChecked: z.array(z.string()).optional(),
   constraintViolations: z.array(constraintViolationSchema).optional(),
   /** Trigger condition / "How to apply" — pass empty string or null to clear. */
-  appliesWhen: z.string().optional()
+  appliesWhen: z.string().optional(),
+  surface: z.array(z.enum(['pre-edit', 'intent-create', 'stop', 'recall'])).optional()
+    .describe('Update the ceremony routing for this in-flight session decision. Same vocabulary as record_decision.surface.')
 })
 
 export const editSessionDecisionSchema = z.object({
