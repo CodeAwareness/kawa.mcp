@@ -29,10 +29,21 @@ export async function logWork(input: LogWorkInput): Promise<LogWorkResponse> {
     ...extractForkFields(input),
   })
 
-  const intentId = res.intentId || ''
+  // Positive receipt required: a logged work item always comes back with an id.
+  // `res.success !== false` alone would report success for any response that
+  // merely omits `success` (see constraint cdb76224), and the message below
+  // asserted success unconditionally.
+  const intentId = typeof res.intentId === 'string' ? res.intentId : ''
+  if (res.success === false || !intentId) {
+    return {
+      success: false,
+      intentId: '',
+      message: res.error || 'Nothing was logged (Kawa Code returned no intent id). Re-send, and report the failure rather than assuming it was captured.',
+    }
+  }
 
   return {
-    success: res.success !== false,
+    success: true,
     intentId,
     message: `Logged: "${input.title}"`
   }

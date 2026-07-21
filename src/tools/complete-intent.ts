@@ -142,7 +142,13 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   const intentId = res.intentId || ''
   const intentTitle = res.intentTitle || 'Intent'
   const previousStatus = res.previousStatus || 'active'
-  const success = res.success !== false
+  // A completed intent ALWAYS comes back with its id — the base success payload
+  // carries both `success: true` and `intentId`, with deferredConflicts /
+  // apiSyncDeferred merged onto it, so those keep succeeding. A response that
+  // neither declares failure nor carries an id completed nothing; reporting it
+  // as success would claim a status flip, block auto-capture and distillation
+  // that never happened (constraint cdb76224).
+  const success = res.success !== false && !!intentId
   const deferredConflicts: ConflictMatch[] = Array.isArray(res.deferredConflicts) ? res.deferredConflicts : []
   const committedDecisionCount: number | undefined =
     typeof res.committedDecisionCount === 'number' ? res.committedDecisionCount : undefined
@@ -167,9 +173,13 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
       `The ephemerals were preserved. Wait for the underlying issue to clear, then retry complete_intent. ` +
       `If retrying repeatedly fails, the user can abandon the intent (complete_intent(status="abandoned")).`
   } else if (!success) {
-    // Catch-all for legacy / unexpected error shapes.
-    newStatus = res.newStatus || res.status || input.status
-    message = `Failed to complete intent "${intentTitle}".`
+    // Catch-all for legacy / unexpected error shapes, plus the anomalous
+    // "no failure declared AND no intentId" case. In the latter nothing ran,
+    // so do NOT echo the requested status as though it had landed.
+    newStatus = res.newStatus || res.status || (intentId ? input.status : 'active')
+    message = intentId
+      ? `Failed to complete intent "${intentTitle}".`
+      : `Could not complete intent "${intentTitle}" — Kawa Code returned no intent id, so NOTHING was completed: the status was not changed, no code blocks were captured, and no decisions were distilled. Do NOT report this as committed. Retry complete_intent; if it fails again, surface the failure to the user rather than assuming the intent closed.`
   } else {
     // Clean completion. Note: Phase 3.5 may have queued writes for later
     // replay — the response is success=true but apiSyncDeferred=true.

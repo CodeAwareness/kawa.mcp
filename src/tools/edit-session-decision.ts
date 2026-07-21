@@ -38,6 +38,7 @@ export type EditSessionDecisionInput = z.infer<typeof editSessionDecisionSchema>
 
 export interface EditSessionDecisionResponse {
   success: boolean
+  error?: string
 }
 
 export async function editSessionDecision(input: EditSessionDecisionInput): Promise<EditSessionDecisionResponse> {
@@ -51,7 +52,21 @@ export async function editSessionDecision(input: EditSessionDecisionInput): Prom
     ...extractForkFields(input),
   })
 
-  return { success: res.success !== false }
+  // No id receipt exists for an update/delete, so require an EXPLICIT
+  // success instead of inferring it from the absence of a failure
+  // (constraint cdb76224). Safe here: Kawa Code sets `success` on every
+  // branch of this action, so a missing flag means an unexpected shape, not
+  // a silent success. Surface `error` so the caller learns WHY — e.g. the
+  // synced-decision case, which must be refined via record_decision(supersedes).
+  if (res.success === true) return { success: true }
+
+  return {
+    success: false,
+    error:
+      typeof res.error === 'string' && res.error.length > 0
+        ? res.error
+        : 'The decision was NOT modified (Kawa Code did not confirm the edit). Nothing changed — re-check the decision id and intent id.',
+  }
 }
 
 export const editSessionDecisionTool = {
