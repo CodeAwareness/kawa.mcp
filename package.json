@@ -23,7 +23,7 @@
     "dev": "tsc --watch",
     "start": "node build/index.js",
     "clean": "rm -rf build",
-    "test": "yarn build && node --test 'build/pre-edit/*.test.js' 'build/stop/*.test.js'",
+    "test": "yarn build && node --test 'build/pre-edit/*.test.js' 'build/stop/*.test.js' 'build/tools/*.test.js'",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

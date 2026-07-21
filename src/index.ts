@@ -14,6 +14,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 
 import { connectToMuninn, ensureRepo } from './services/muninn-ipc.js'
+import { salvageMangledArgs } from './tools/_salvage-mangled-args.js'
 
 import {
   allTools,
@@ -88,7 +89,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params
+  const { name, arguments: rawArgs } = request.params
+
+  // A malformed tool-call block (a parameter closed with `</fieldName>` instead
+  // of the required closing tag, followed by one opened without the required
+  // prefix) makes the harness fold the next field's name AND value into the
+  // preceding string. Recover them before dispatch — one seam covers every
+  // tool. Guarded and logged, never silent: see _salvage-mangled-args.ts.
+  let args = rawArgs
+  const schema = allTools.find(t => t.name === name)?.inputSchema
+  if (args && typeof args === 'object' && schema) {
+    const { args: repaired, salvaged } = salvageMangledArgs(
+      args as Record<string, unknown>,
+      Object.keys(schema.shape),
+    )
+    if (salvaged.length > 0) {
+      args = repaired
+      // stderr only — stdout is the MCP transport.
+      console.error(
+        `[MuninnIPC] Recovered ${salvaged.length} malformed argument(s) for ${name}: ` +
+          salvaged.map(s => `${s.field} (absorbed by ${s.fromField})`).join(', '),
+      )
+    }
+  }
 
   try {
     const repoPath = (args as any)?.repoPath
