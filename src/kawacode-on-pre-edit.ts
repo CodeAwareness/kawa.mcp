@@ -14,9 +14,14 @@
  *
  * Maps recommendation to Claude Code's hook protocol:
  *   - "investigate-upstream" → exit 2 + stderr message (block)
- *     UNLESS tool_input.force === true → pre-edit-cache:add + exit 0
+ *     UNLESS tool_input.force === true → exit 0 (one-shot proceed)
  *   - "review"               → exit 0 + JSON on stdout (advisory)
  *   - "proceed" / silent     → exit 0, no output
+ *
+ * Decisions the agent has acknowledged via pre_edit_acknowledge are read from
+ * this session's transcript and passed as `forceOverrides`, so Muninn filters
+ * them before computing the recommendation (replaces the token-keyed
+ * pre-edit-cache; kawa.mcp decision 59ad77ed).
  *
  * This hook carries only the SEMANTIC (decision-tier) signal. The live-HAI
  * code-collision signal was relocated off this per-edit path to a once-per-turn
@@ -35,6 +40,7 @@ import { readFileSync } from 'node:fs'
 import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { resolvePaths } from './pre-edit/path-resolve.js'
+import { ackedDecisionIds } from './pre-edit/acked-decisions.js'
 import { emitInjection, emitActedOn, estimateTokens } from './telemetry.js'
 
 // Hook stderr is surfaced to the agent/user on exit-2 blocks — suppress the
@@ -44,6 +50,7 @@ setQuiet(!process.env.KAWA_DEBUG)
 
 interface HookPayload {
   session_id?: string
+  transcript_path?: string
   cwd?: string
   hook_event_name?: string
   tool_name?: string
@@ -220,7 +227,20 @@ async function main(): Promise<void> {
   const target = resolveTarget(payload)
   if (!target) process.exit(0)
 
-  const sessionToken = payload.session_id || 'default'
+  // Transcript-based acknowledgment (replaces the token-keyed pre-edit cache):
+  // the decision ids the agent already acknowledged via pre_edit_acknowledge,
+  // read from THIS session's own transcript. Same namespace as the hook
+  // (payload.transcript_path is in payload.session_id's space), so no
+  // cross-process session-id rendezvous — see kawa.mcp decision 59ad77ed.
+  // Fail-soft: an unreadable transcript just means no overrides (surface all).
+  let forceOverrides: string[] = []
+  if (payload.transcript_path) {
+    try {
+      forceOverrides = [...ackedDecisionIds(readFileSync(payload.transcript_path, 'utf8'))]
+    } catch {
+      /* no transcript → behave as before (nothing suppressed) */
+    }
+  }
 
   // Resolve origin from the repo path. Falls back silently to exit 0
   // when git isn't available or the path isn't a repo.
@@ -245,7 +265,7 @@ async function main(): Promise<void> {
       filePath: target.filePath,
       startLine: target.startLine,
       endLine: target.endLine,
-      sessionToken,
+      forceOverrides,
     })
   } catch {
     disconnect()
@@ -256,20 +276,11 @@ async function main(): Promise<void> {
     const force = payload.tool_input?.force === true
     const ids = (res.decisions ?? []).map(d => d.decisionId).filter(Boolean)
     if (force) {
-      // Acknowledge surfaced decisions for this session, then allow.
-      if (ids.length > 0) {
-        try {
-          await request('pre-edit-cache', 'add', {
-            sessionToken,
-            decisionIds: ids,
-          })
-        } catch {
-          /* best-effort */
-        }
-      }
+      // force:true is a one-shot "proceed now". The DURABLE acknowledgment is a
+      // pre_edit_acknowledge call, whose presence in the transcript suppresses
+      // future blocks (ackedDecisionIds above) — so there's no cache to write.
       // Track-B acted-on (VALUE_METRICS Phase 2): the agent consciously
-      // overrode the surfaced reasoning — it acted on the pre_edit injection.
-      // One signal per surfaced decision id (refId), origin in hand here.
+      // overrode the surfaced reasoning — one signal per surfaced decision id.
       try {
         await Promise.allSettled(ids.map(id => emitActedOn({ type: 'pre_edit', refId: id, repoOrigin })))
       } catch { /* fire-and-forget */ }

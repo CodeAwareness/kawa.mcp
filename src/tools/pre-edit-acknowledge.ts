@@ -1,28 +1,29 @@
 import { z } from 'zod'
 
-import { request, SESSION_ID } from '../services/muninn-ipc.js'
 import { forkFieldsExtensions } from './_fork-fields.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { emitActedOn } from '../telemetry.js'
 
 /**
- * Thin proxy to Muninn's `pre-edit-cache:add` handler.
+ * Marker tool: acknowledging a pre-edit decision.
  *
- * Pre-thinning, this tool wrapped a local cache.ts module that itself
- * called the same Muninn IPC. Phase 3 of the kawa.mcp → kawa.muninn
- * migration drops the wrapper. Telemetry now lives in Muninn too —
- * the `pre-edit-cache:add` handler emits its own override event.
+ * This tool no longer writes any override state. The pre-edit hook reads THIS
+ * call's presence in the session transcript (a `pre_edit_acknowledge` tool_use
+ * naming `decisionIds`) and suppresses those decisions from future blocks — see
+ * `src/pre-edit/acked-decisions.ts` and kawa.mcp decision 59ad77ed. That
+ * transcript read lives entirely in the hook's own session namespace, so it
+ * replaces the old token-keyed `pre-edit-cache`, which silently mis-routed the
+ * override across the hook/MCP process boundary after a session restart.
+ *
+ * The only side effect here is the acted-on value-metric; the acknowledgment
+ * itself is carried by the tool_use record, not by anything this handler does.
  */
 
 export const preEditAcknowledgeSchema = z.object({
   decisionIds: z
     .array(z.string().min(1))
     .min(1)
-    .describe('Decision IDs to acknowledge (mark as overridden for the rest of this session)'),
-  sessionToken: z
-    .string()
-    .optional()
-    .describe('Session scope for the force-override cache. Should match the sessionToken passed to pre_edit_decision_check. Defaults to the MCP server\'s SESSION_ID.'),
+    .describe('Decision IDs to acknowledge (suppress from pre-edit blocks for the rest of this session)'),
   repoOrigin: z
     .string()
     .optional()
@@ -38,18 +39,11 @@ export type PreEditAcknowledgeInput = z.infer<typeof preEditAcknowledgeSchema>
 
 export interface PreEditAcknowledgeResponse {
   acknowledged: number
-  cacheSize: number
 }
 
 export async function preEditAcknowledge(
   input: PreEditAcknowledgeInput,
 ): Promise<PreEditAcknowledgeResponse> {
-  const sessionToken = input.sessionToken ?? SESSION_ID
-  const res = await request('pre-edit-cache', 'add', {
-    sessionToken,
-    decisionIds: input.decisionIds,
-  })
-
   // Track-B acted-on (VALUE_METRICS Phase 2): an explicit acknowledge IS the
   // agent acting on the surfaced pre_edit reasoning — one signal per decision
   // id. Only attributable to a repo when an origin can be resolved (this tool
@@ -61,23 +55,20 @@ export async function preEditAcknowledge(
     } catch { /* origin unresolvable — skip attribution */ }
   }
 
-  return {
-    acknowledged: typeof res?.added === 'number' ? res.added : 0,
-    cacheSize: typeof res?.total === 'number' ? res.total : 0,
-  }
+  // No IPC: the transcript record of this call is the acknowledgment.
+  return { acknowledged: input.decisionIds.length }
 }
 
 export const preEditAcknowledgeTool = {
   name: 'pre_edit_acknowledge',
-  description: `Mark decisions as consciously overridden for the rest of this session.
+  description: `Acknowledge pre-edit decisions so they stop blocking your edits for the rest of this session.
 
-Phase 3's PreToolUse hook calls this when the agent passes \`force: true\` on an Edit tool call to bypass a pre_edit_decision_check block. Adds the surfaced decision IDs to an in-memory session cache; subsequent pre_edit_decision_check fires filter those IDs out so the same block doesn't re-fire.
+When a pre_edit_decision_check block fires and you judge the surfaced reasoning does NOT apply to your edit, call this with the surfaced decision IDs, then retry the edit — those decisions won't re-block this session. The acknowledgment is recorded by this call itself appearing in the session transcript, which the pre-edit hook reads; it needs no session token and is not affected by restarts.
 
-The cache resets when the MCP server process exits (= the agent session ends). For persistent override across sessions, record a fork decision via \`record_decision(type: "fork", supersedes: [<id>])\` instead.
+For a PERSISTENT override across sessions (the reasoning is actually wrong or replaced), record a fork instead: \`record_decision(type: "fork", supersedes: [<id>])\`.
 
 Returns:
-- acknowledged: number of newly-added IDs (existing IDs are deduped silently)
-- cacheSize: total IDs currently in the session override cache`,
+- acknowledged: number of decision IDs acknowledged`,
   inputSchema: preEditAcknowledgeSchema,
   handler: preEditAcknowledge,
 }
