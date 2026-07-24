@@ -22,6 +22,7 @@ import {
   checkActiveIntent,
   createAndActivateIntent,
   activateIntent,
+  resumeIntent,
   getIntentsForFile,
   getIntentsForLines,
   listTeamIntents,
@@ -133,6 +134,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'activate_intent':
         result = await activateIntent(args as any)
+        break
+      case 'resume_intent':
+        result = await resumeIntent(args as any)
         break
       case 'get_intents_for_file':
         result = await getIntentsForFile(args as any)

@@ -2,6 +2,7 @@ import { checkActiveIntentTool, checkActiveIntent, checkActiveIntentSchema } fro
 import { getRelevantContextTool, getRelevantContext, getRelevantContextSchema } from './get-relevant-context.js'
 import { createAndActivateIntentTool, createAndActivateIntent, createAndActivateIntentSchema } from './create-intent.js'
 import { activateIntentTool, activateIntent, activateIntentSchema } from './activate-intent.js'
+import { resumeIntentTool, resumeIntent, resumeIntentSchema } from './resume-intent.js'
 import { getIntentsForFileTool, getIntentsForFile, getIntentsForFileSchema } from './get-intents-for-file.js'
 import { getIntentsForLinesTool, getIntentsForLines, getIntentsForLinesSchema } from './get-intents-for-lines.js'
 import { listTeamIntentsTool, listTeamIntents, listTeamIntentsSchema } from './list-team-intents.js'
@@ -40,6 +41,9 @@ export {
   activateIntentTool,
   activateIntent,
   activateIntentSchema,
+  resumeIntentTool,
+  resumeIntent,
+  resumeIntentSchema,
   getIntentsForFileTool,
   getIntentsForFile,
   getIntentsForFileSchema,
@@ -118,6 +122,7 @@ export const allTools = [
   checkActiveIntentTool,
   createAndActivateIntentTool,
   activateIntentTool,
+  resumeIntentTool,
   getIntentsForFileTool,
   getIntentsForLinesTool,
   listTeamIntentsTool,

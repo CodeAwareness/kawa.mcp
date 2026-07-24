@@ -89,7 +89,8 @@ Override paths when blocked:
   ```
   record_decision(type: "fork", supersedes: ["<surfaced-decision-id>"], rationale: "...")
   ```
-- **One-off escape hatch:** add `force: true` to the Edit tool args. The hook acks the surfaced decisions in the session cache and allows the edit. Cache resets when the Kawa Code daemon restarts.
+- **For this session:** call `pre_edit_acknowledge(decisionIds: ["<surfaced-decision-id>"])`, then retry the Edit — that decision won't block again for the rest of the session. The acknowledgment is read back from your session transcript, so it needs no session token and is unaffected by daemon or session restarts within the same conversation.
+- **One-off:** add `force: true` to the Edit tool args to proceed a single time.
 
 Disable the hook for a session with `KAWA_PRE_EDIT_CHECK=off`.
 
@@ -110,6 +111,21 @@ Disable telemetry with `KAWA_PRE_EDIT_TELEMETRY=off`.
 - **Smart context retrieval** — relevance-based loading; only what the current task needs.
 - **Zero-knowledge encryption** — code blocks encrypted client-side before sync. The Kawa cloud cannot decrypt your team's code.
 - **Cross-platform** — works with Claude Code, Cursor, and any MCP-compatible AI assistant.
+
+## Handing off work to a teammate (no session export)
+
+Because the reasoning behind your work — your intents and recorded decisions — lives in Kawa Code rather than in the chat log, a teammate can pick up where you left off from a single prompt. No transcript sharing, no session restore.
+
+1. **Commit or push your code first.** A handoff prompt carries your *reasoning*, not your uncommitted working tree — so land the code (or publish the pre-commit diff) before you hand off, otherwise your teammate inherits the decisions without the diff that goes with them.
+2. **Grab the intent id.** The id of the intent you were working under — your agent can read it back with `check_active_intent`, or you can find it in the Kawa Code app.
+3. **Hand over a one-line prompt,** e.g. `Follow up on intent <intent-id>: <what's left to do>`.
+4. **Your teammate pastes it into a fresh session.** Their agent calls `resume_intent(<id>)` — one call that adopts the intent as their current focus *and* loads its recorded decisions — resuming the thread with full context, even though it never saw your chat.
+
+**What transfers:** the intent, its decisions, and (once committed) its code. **What doesn't:** your chat transcript and any session-local state. An acknowledgment you made to a pre-edit block is *your* judgment in *your* session, so your teammate re-evaluates it rather than inheriting it — which is what you want.
+
+**Teams:** to make the handoff seamless, add one line to your shared `CLAUDE.md` so the agent always treats a follow-up prompt as *resuming* the named intent instead of opening a new one:
+
+> When a prompt says "follow up on intent `<id>`" (or similar), call `resume_intent(<id>)` to adopt that intent and load its decisions — do not create a new intent for it.
 
 ## Migrating or rewriting a codebase? Transplant its decisions
 

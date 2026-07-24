@@ -192,6 +192,7 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 |------|---------|
 | `check_active_intent` | Check for active intent before starting work |
 | `create_and_activate_intent` | Create new intent for a task |
+| `resume_intent` | Resume an existing intent by id in one call (activate + load its decisions) — use for a "follow up on intent &lt;id&gt;" handoff instead of creating a new one |
 | `get_intents_for_file` | Check for team conflicts on a file |
 | `get_intents_for_lines` | Check for conflicts on specific lines |
 | `assign_blocks_to_intent` | Associate code changes with intent |
