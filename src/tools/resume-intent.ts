@@ -1,20 +1,22 @@
 import { z } from 'zod'
+import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 import { activateIntent } from './activate-intent.js'
-import { getIntentChanges } from './get-intent-changes.js'
 import { getProjectDecisions, type ProjectDecision } from './get-project-decisions.js'
 
 /**
  * One-call intent hydration for cross-developer handoff.
  *
- * Composes three EXISTING tools/IPC actions — nothing new is added to Muninn,
- * so this works against any daemon version (backwards compatible):
- *   1. activate_intent  → adopt the intent as this session's current focus
- *   2. get_intent_changes → the (now-active) intent's title/description/status
- *   3. get_project_decisions → its recorded decisions (summary-only, lean)
+ * Composes three EXISTING Muninn IPC actions — nothing new is added to the
+ * daemon, so this works against any daemon version (backwards compatible):
+ *   1. intent:set-active (via activate_intent) → adopt the intent as current
+ *   2. intent:get → the intent's title/description/status by id
+ *   3. decision:project-list (via get_project_decisions) → its decisions, lean
  *
- * The existing tools are reused, never modified. A future Muninn
+ * NB: metadata comes from `intent:get`, NOT the `get_intent_changes` tool —
+ * that tool forwards to a non-existent `intent:get-changes` action and always
+ * errors (surfaced by the resume_intent live smoke test). A future Muninn
  * `decision:by-intent` filter would let step 3 avoid pulling the full project
  * list, but that's an optimization, not a requirement.
  */
@@ -56,26 +58,29 @@ export async function resumeIntent(input: ResumeIntentInput): Promise<ResumeInte
     }
   }
 
-  // 2 + 3. Hydrate the now-active intent's metadata and its decisions in parallel.
-  const [changes, project] = await Promise.all([
-    getIntentChanges(base),
+  // 2 + 3. Hydrate the intent's metadata (by id) and its decisions in parallel.
+  const [intentRes, project] = await Promise.all([
+    request('intent', 'get', { repoOrigin: origin, id: input.intentId }),
     getProjectDecisions(base),
   ])
+
+  const raw = intentRes?.intent
+  const resolvedId: string = raw?.id || raw?._id || ''
 
   // Match decisions on every id form we know for this intent — the handoff
   // prompt may carry the cloud id while stored decisions carry a local id (or
   // vice versa), so union the passed id, the activated id, and the resolved one.
   const targetIds = new Set<string>([input.intentId, activated.intentId])
-  if (changes.intent?.id) targetIds.add(changes.intent.id)
+  if (resolvedId) targetIds.add(resolvedId)
   const decisions = project.decisions.filter(
     d => targetIds.has(d.intentId) || d.intentIds.some(id => targetIds.has(id)),
   )
 
-  const intent = changes.hasActiveIntent && changes.intent
+  const intent = raw
     ? {
-        title: changes.intent.title,
-        description: changes.intent.description,
-        status: changes.intent.status,
+        title: raw.title || '',
+        description: raw.description || '',
+        status: raw.status || 'active',
       }
     : undefined
 
