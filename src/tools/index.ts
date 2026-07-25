@@ -6,7 +6,6 @@ import { resumeIntentTool, resumeIntent, resumeIntentSchema } from './resume-int
 import { getIntentsForFileTool, getIntentsForFile, getIntentsForFileSchema } from './get-intents-for-file.js'
 import { getIntentsForLinesTool, getIntentsForLines, getIntentsForLinesSchema } from './get-intents-for-lines.js'
 import { listTeamIntentsTool, listTeamIntents, listTeamIntentsSchema } from './list-team-intents.js'
-import { getIntentChangesTool, getIntentChanges, getIntentChangesSchema } from './get-intent-changes.js'
 import { completeIntentTool, completeIntent, completeIntentSchema } from './complete-intent.js'
 import { updateIntentTool, updateIntent, updateIntentSchema } from './update-intent.js'
 import { logWorkTool, logWork, logWorkSchema } from './log-work.js'
@@ -53,9 +52,6 @@ export {
   listTeamIntentsTool,
   listTeamIntents,
   listTeamIntentsSchema,
-  getIntentChangesTool,
-  getIntentChanges,
-  getIntentChangesSchema,
   completeIntentTool,
   completeIntent,
   completeIntentSchema,
@@ -126,7 +122,6 @@ export const allTools = [
   getIntentsForFileTool,
   getIntentsForLinesTool,
   listTeamIntentsTool,
-  getIntentChangesTool,
   completeIntentTool,
   updateIntentTool,
   // Lightweight logging

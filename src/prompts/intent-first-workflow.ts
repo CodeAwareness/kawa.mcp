@@ -36,7 +36,7 @@ Before using MCP tools, assess the task complexity. Match your workflow to the t
 |------|--------|------|
 | **After exploring request** | Get relevant context (with discovered files) | \`get_relevant_context\` |
 | **Before coding** | Check/create intent | \`check_active_intent\`, \`create_and_activate_intent\` |
-| **On "done"/"commit"/"worked"/etc.** | Verify diff → Git commit → Complete | \`get_intent_changes\`, \`complete_intent\` |
+| **On "done"/"commit"/"worked"/etc.** | Verify diff → Git commit → Complete | \`git status\`, \`complete_intent\` |
 
 > **Note**: Code blocks are attached to the intent automatically when you call \`complete_intent\` with a commit SHA. There is no manual "assign blocks" step.
 
@@ -80,13 +80,13 @@ When you detect a context switch, prompt the user:
 > 2. **Continue** - this is actually related to the current intent
 > 3. **Abandon** the current work without committing"
 
-Use \`get_intent_changes\` to get the file count and change summary for the prompt.
+Use \`git status\` to get the file count and change summary for the prompt.
 
 ### Commit Flow
 
 When the user chooses to commit (or explicitly requests it):
 
-1. **Get changes**: Call \`get_intent_changes\` to see modified files
+1. **Get changes**: Call \`git status\` to see modified files
 
 2. **Review conversation for missed decisions**: Analyze the conversation since the intent was created. Look for architectural decisions that were made but not yet recorded:
    - **Alternatives discussed**: "Should we use X or Y?" → "Let's use X because..."
@@ -134,9 +134,9 @@ When the user chooses to commit (or explicitly requests it):
 | Scenario | Handling |
 |----------|----------|
 | User returns after long break with stale intent | Proactively mention: "You have an active intent '[title]' from [time ago]. Want to continue, commit, or abandon it?" |
-| Pre-existing uncommitted changes when creating intent | Note in \`get_intent_changes\` warnings; let user decide what to include |
+| Pre-existing uncommitted changes when creating intent | Note in \`git status\` warnings; let user decide what to include |
 | Git commit fails | Report error, keep intent active, let user resolve |
-| User makes changes outside Claude | \`get_intent_changes\` shows all uncommitted changes; user decides what to commit |
+| User makes changes outside Claude | \`git status\` shows all uncommitted changes; user decides what to commit |
 | Multiple small tasks in quick succession | Use judgment - if truly separate, prompt; if related, batch under one intent |
 
 ### Retroactive Intent Assignment (Committing Pre-Existing Changes)
@@ -185,7 +185,6 @@ For each group:
 | \`create_and_activate_intent\` | When no active intent and user requests code changes |
 | \`get_intents_for_file\` | Before modifying files (check for team conflicts) |
 | \`get_intents_for_lines\` | Before modifying specific line ranges |
-| \`get_intent_changes\` | Before prompting about commit (to show change summary) |
 | \`complete_intent\` | After successful git commit, or to abandon |
 | \`list_team_intents\` | To see what teammates are working on |
 

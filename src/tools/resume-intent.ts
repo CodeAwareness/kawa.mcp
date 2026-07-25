@@ -14,11 +14,8 @@ import { getProjectDecisions, type ProjectDecision } from './get-project-decisio
  *   2. intent:get → the intent's title/description/status by id
  *   3. decision:project-list (via get_project_decisions) → its decisions, lean
  *
- * NB: metadata comes from `intent:get`, NOT the `get_intent_changes` tool —
- * that tool forwards to a non-existent `intent:get-changes` action and always
- * errors (surfaced by the resume_intent live smoke test). A future Muninn
- * `decision:by-intent` filter would let step 3 avoid pulling the full project
- * list, but that's an optimization, not a requirement.
+ * A future Muninn `decision:by-intent` filter would let step 3 avoid pulling
+ * the full project list, but that's an optimization, not a requirement.
  */
 
 export const resumeIntentSchema = z.object({

@@ -157,7 +157,7 @@ Do NOT record routine refactors, obvious bug fixes, version bumps, or formatting
 
 When committing:
 
-1. Call `get_intent_changes` to see modified files
+1. Run `git status` to see modified files
 2. Call `assign_blocks_to_intent` with all modified file ranges
 3. Execute git commit:
    ```bash
@@ -196,7 +196,6 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | `get_intents_for_file` | Check for team conflicts on a file |
 | `get_intents_for_lines` | Check for conflicts on specific lines |
 | `assign_blocks_to_intent` | Associate code changes with intent |
-| `get_intent_changes` | Get uncommitted changes summary |
 | `complete_intent` | Mark intent as committed/done/abandoned |
 | `update_intent` | Reformulate an intent's title, description, scope, or constraints as understanding evolves |
 | `list_team_intents` | See what teammates are working on |
