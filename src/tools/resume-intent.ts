@@ -30,6 +30,8 @@ export type ResumeIntentInput = z.infer<typeof resumeIntentSchema>
 export interface ResumeIntentResponse {
   resumed: boolean
   intentId: string
+  /** True when the resume was refused because the intent is frozen (stale beyond the freeze window). */
+  frozen?: boolean
   intent?: { title: string; description: string; status: string }
   decisions: ProjectDecision[]
   count: number
@@ -46,12 +48,26 @@ export async function resumeIntent(input: ResumeIntentInput): Promise<ResumeInte
   //    displaces another session's current). Fail loud if it can't be activated.
   const activated = await activateIntent({ ...base, intentId: input.intentId })
   if (!activated.success || !activated.intentId) {
+    // Frozen intents (stale beyond the freeze window) can no longer be resumed —
+    // surface that distinctly so the agent starts a new intent instead of retrying.
+    if (activated.frozen) {
+      return {
+        resumed: false,
+        intentId: input.intentId,
+        frozen: true,
+        decisions: [],
+        count: 0,
+        message: `Intent ${input.intentId} is frozen (inactive too long) and can no longer be resumed. Start a new intent for the follow-up work — or take it over if you need ownership.`,
+      }
+    }
     return {
       resumed: false,
       intentId: input.intentId,
       decisions: [],
       count: 0,
-      message: `Could not resume intent ${input.intentId}: activation failed. Verify the id (cloud id or local UUID) and that the intent exists in this repo.`,
+      message: activated.error
+        ? `Could not resume intent ${input.intentId}: ${activated.error}`
+        : `Could not resume intent ${input.intentId}: activation failed. Verify the id (cloud id or local UUID) and that the intent exists in this repo.`,
     }
   }
 

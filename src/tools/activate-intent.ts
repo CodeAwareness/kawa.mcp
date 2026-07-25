@@ -17,6 +17,9 @@ export interface ActivateIntentResponse {
   intentId: string
   action?: 'activated' | 'already_active'
   previousActiveId?: string
+  /** True when activation was refused because the intent is frozen (stale beyond the freeze window). */
+  frozen?: boolean
+  error?: string
   message: string
 }
 
@@ -40,11 +43,24 @@ export async function activateIntent(input: ActivateIntentInput): Promise<Activa
   // Move THIS session's `current` pointer to the target intent. Under the
   // multi-active model (no lock) this never conflicts — other sessions keep
   // their own current pointers, and the API holds the full active set.
-  await request('intent', 'set-active', {
+  const res = await request('intent', 'set-active', {
     repoOrigin: actualOrigin,
     intentId: input.intentId,
     ...extractForkFields(input),
   })
+
+  // A failed set-active must not be reported as an activation. The main case is
+  // the freeze gate: reactivating an intent stale beyond the freeze window is
+  // refused (`frozen: true`), so surface that instead of a false success.
+  if (res?.success === false) {
+    return {
+      success: false,
+      intentId: input.intentId,
+      frozen: res.frozen === true,
+      error: res.error || 'Could not activate this intent.',
+      message: res.error || `Could not activate intent ${input.intentId.substring(0, 8)}.`,
+    }
+  }
 
   return {
     success: true,
