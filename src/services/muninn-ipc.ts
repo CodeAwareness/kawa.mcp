@@ -290,11 +290,15 @@ function routeResponse(msg: any): void {
       //   - create_and_activate_intent similarity conflicts: { conflict: true, conflicts: [...] }
       //   - complete_intent distillation conflicts:          { reason: "conflicts", conflicts: [...] }
       //   - complete_intent transient failures:              { reason: "transient-failure", error, failedStage }
+      //   - set-active / takeover freeze refusals:           { frozen: true, error }
       // Without this, complete_intent's conflict shape (no `conflict` flag, no
       // `error` field) fell through to the generic reject below and surfaced as
       // the opaque "no error message" — bypassing complete-intent.ts's
-      // conflict-surfacing logic entirely.
-      if (data.conflict === true || typeof data.reason === 'string' || Array.isArray(data.conflicts)) {
+      // conflict-surfacing logic entirely. The freeze shape carries an `error`
+      // (so it reads fine), but rejecting it makes activate_intent's and
+      // resume_intent's `frozen` branches unreachable — the agent loses the
+      // structured signal telling it to start a NEW intent rather than retry.
+      if (data.conflict === true || data.frozen === true || typeof data.reason === 'string' || Array.isArray(data.conflicts)) {
         pending.resolve(data)
         return
       }
