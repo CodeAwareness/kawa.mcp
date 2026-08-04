@@ -58,6 +58,46 @@ npm run clean
 echo "==> Building TypeScript"
 npm run build
 
+# Rollback guard. Everything from the version bump up to (and including)
+# `npm publish` is reversible, so if the deploy dies in that window — a registry
+# outage during validate, an npm hiccup — we put package.json and server.json
+# back byte-for-byte instead of leaving an orphaned bump behind. Without this a
+# flaky network burns a version number on every attempt.
+#
+# Restores from a temp copy rather than `git checkout`, which would also destroy
+# any unrelated uncommitted edits to these two files.
+#
+# Invariant: a deploy that fails before npm publish leaves the working tree
+# exactly as it found it. Once npm publish lands the version is permanent, so
+# the guard is disarmed there — from that point on, recover by hand (see
+# "Recovery from half-published state" in CLAUDE.md).
+ROLLBACK_DIR=""
+OLD_VERSION="v$(node -e "process.stdout.write(require('./package.json').version)")"
+
+restore_version_files() {
+  [ -n "$ROLLBACK_DIR" ] && [ -d "$ROLLBACK_DIR" ] || return 0
+  cp "$ROLLBACK_DIR/package.json" package.json
+  cp "$ROLLBACK_DIR/server.json" server.json
+  rm -rf "$ROLLBACK_DIR"
+  ROLLBACK_DIR=""
+  echo "" >&2
+  echo "==> Deploy failed before npm publish — version bump rolled back." >&2
+  echo "    package.json + server.json restored to $OLD_VERSION." >&2
+  echo "    Nothing was published. Safe to re-run ./deploy.sh." >&2
+}
+
+disarm_rollback() {
+  [ -n "$ROLLBACK_DIR" ] || return 0
+  rm -rf "$ROLLBACK_DIR"
+  ROLLBACK_DIR=""
+}
+
+trap restore_version_files EXIT
+
+ROLLBACK_DIR="$(mktemp -d)"
+cp package.json "$ROLLBACK_DIR/package.json"
+cp server.json "$ROLLBACK_DIR/server.json"
+
 if [ "$ARG" = "--no-bump" ]; then
   NEW_VERSION="v$(node -e "process.stdout.write(require('./package.json').version)")"
   echo "==> Using existing version $NEW_VERSION (--no-bump)"
@@ -85,6 +125,11 @@ mcp-publisher validate
 
 echo "==> Publishing to npm"
 npm publish --access public
+
+# Point of no return: npm now owns this version number and `npm publish` would
+# reject a re-publish, so the bump must stand even if the registry steps below
+# fail. Disarm the rollback guard.
+disarm_rollback
 
 echo "==> Authenticating with MCP Registry (DNS, $DOMAIN)"
 PRIVATE_KEY_HEX=$("$OPENSSL_BIN" pkey -in "$KEY_FILE" -outform DER | tail -c 32 | xxd -p -c 64)

@@ -59,19 +59,28 @@ Use `--no-bump` when the version was already bumped in a prior commit — e.g. a
 
 1. **Pre-flight** — fail if `mcp-registry-key.pem` or the `mcp-publisher` CLI is missing.
 2. **Build** — clean + `tsc`.
-3. **Bump** — `npm version <bump> --no-git-tag-version`.
-4. **Sync** — `server.json` top-level `version` and `packages[0].version` updated to match `package.json` (see version sync invariant above).
-5. **Validate** — `mcp-publisher validate` checks `server.json` against the live registry schema. Catches errors before any publish lands. Note the registry caps `description` at **100 chars**.
-6. **npm publish** — `--access public`.
-7. **Registry auth** — DNS-method, Ed25519, against `kawacode.ai`. The script extracts the raw 32-byte private key from the PEM with:
+3. **Arm the rollback guard** — snapshot `package.json` + `server.json` to a temp dir (see rollback invariant below).
+4. **Bump** — `npm version <bump> --no-git-tag-version`.
+5. **Sync** — `server.json` top-level `version` and `packages[0].version` updated to match `package.json` (see version sync invariant above).
+6. **Validate** — `mcp-publisher validate` checks `server.json` against the live registry schema. Catches errors before any publish lands. Note the registry caps `description` at **100 chars**.
+7. **npm publish** — `--access public`. On success the rollback guard is **disarmed** — the version is now permanent.
+8. **Registry auth** — DNS-method, Ed25519, against `kawacode.ai`. The script extracts the raw 32-byte private key from the PEM with:
    ```bash
    openssl pkey -in mcp-registry-key.pem -outform DER | tail -c 32 | xxd -p -c 64
    ```
    **Important**: macOS `/usr/bin/openssl` is LibreSSL and does not support Ed25519 — it will fail with `unsupported algorithm`. `deploy.sh` auto-detects a real OpenSSL (prefers `openssl@3` from Homebrew). For manual invocations, use the full path, e.g. `/opt/homebrew/opt/openssl@3/bin/openssl`.
 
    That hex string is passed to `mcp-publisher login dns --domain kawacode.ai --private-key <hex> --algorithm ed25519`.
-8. **Registry publish** — `mcp-publisher publish` (reads `./server.json`).
-9. **Commit + tag** — once both publishes succeed, commits the version-bump files (`package.json` + `server.json`) as `chore: release vX.Y.Z` and creates an annotated `vX.Y.Z` tag. Idempotent: skips the commit when nothing is staged (e.g. `--no-bump` where the version was already committed) and skips the tag when it already exists. **Not pushed** — pushing is deliberate and separate: `git push && git push origin vX.Y.Z` when ready (push-only-when-asked). Only the version-bump files are staged, so unrelated uncommitted work is left untouched — commit feature code *before* deploying.
+9. **Registry publish** — `mcp-publisher publish` (reads `./server.json`).
+10. **Commit + tag** — once both publishes succeed, commits the version-bump files (`package.json` + `server.json`) as `chore: release vX.Y.Z` and creates an annotated `vX.Y.Z` tag. Idempotent: skips the commit when nothing is staged (e.g. `--no-bump` where the version was already committed) and skips the tag when it already exists. **Not pushed** — pushing is deliberate and separate: `git push && git push origin vX.Y.Z` when ready (push-only-when-asked). Only the version-bump files are staged, so unrelated uncommitted work is left untouched — commit feature code *before* deploying.
+
+### Rollback invariant: a failed deploy leaves the tree as it found it
+
+The bump happens *before* the registry validate, so without a guard every transient registry outage burns a version number and leaves a dirty tree. `deploy.sh` snapshots `package.json` + `server.json` to a temp dir before the bump and restores them on any exit between the bump and a successful `npm publish`.
+
+- **Restores from the temp copy, not `git checkout`** — a git restore would also wipe unrelated uncommitted edits to those two files.
+- **Disarmed the moment `npm publish` succeeds.** Past that point npm owns the version and would reject a re-publish, so the bump must stand even if the registry steps fail — that's the half-published state below, and it is recovered by hand, never by rollback.
+- Practical effect: after a validate/network failure you can simply re-run `./deploy.sh` — no manual `git checkout` first, no skipped version numbers.
 
 ### Prerequisites (one-time setup)
 
