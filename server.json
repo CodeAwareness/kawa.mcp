@@ -8,12 +8,12 @@
     "url": "https://github.com/kawacode-ai/kawa.mcp",
     "source": "github"
   },
-  "version": "6.9.4",
+  "version": "6.9.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@kawacode/mcp",
-      "version": "6.9.4",
+      "version": "6.9.5",
       "transport": {
         "type": "stdio"
       }
