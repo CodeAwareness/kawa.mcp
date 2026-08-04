@@ -6,7 +6,7 @@ export const inferHistorySchema = z.object({
   commits: z.number().optional().describe('Number of recent commits to analyze. If omitted, the server resumes from the last commit infer_history processed for this repo (or falls back to 50 on first run). Mutually exclusive with `commitRange`.'),
   commitRange: z.string().optional().describe('Optional git revspec to process a specific commit range instead of the N most recent (e.g. "sha1..sha2", "branch1..branch2", "sha1^!" for a single commit). Useful for recovering from dropped batches or targeted backfills. Mutually exclusive with `commits`.'),
   contextIssues: z.boolean().optional().default(false).describe('Include context issues from commit date range (requires gh/glab CLI)'),
-  model: z.string().optional().default('claude-sonnet-4-20250514').describe('Anthropic model to use (default: claude-sonnet-4-20250514)'),
+  model: z.string().optional().default('claude-sonnet-4-20250514').describe('Model slug used for the token/cost estimate only. It does NOT select the model the run uses — that is configured in the Kawa Code app.'),
   maxStories: z.number().optional().default(0).describe('Maximum number of stories to analyze in this run (0 = unlimited).'),
   allowCommitSplitting: z.boolean().optional().default(false).describe('Allow splitting a single commit into multiple stories when it contains unrelated changes (recommended for repos with messy commit history)'),
   estimateOnly: z.boolean().optional().default(true).describe('If true (default), only estimate token cost without running the pipeline. Set to false to run the full pipeline.'),
@@ -187,7 +187,8 @@ Inputs of note:
 - \`commitRange\` (optional): git revspec selecting a specific window — \`"sha1..sha2"\`, \`"branch1..branch2"\`, \`"sha1^!"\` for a single commit. Mutually exclusive with \`commits\`. Useful for recovering from dropped batches or backfilling specific PRs / branches without re-running the full history.
 - \`contextIssues\`: include PR/MR descriptions and issue discussions when an authenticated forge CLI (\`gh\` or \`glab\`) is available; auto-skipped otherwise.
 - \`allowCommitSplitting\`: enable when commit history is messy and a single commit may cover unrelated changes.
-- \`model\`, \`maxStories\`: Anthropic model and per-run cap.
+- \`maxStories\`: per-run cap on how many stories are analyzed.
+- \`model\`: affects the cost estimate only — it does not choose the model the run uses. The run's model is configured in the Kawa Code app.
 - \`force\` (default false): override the re-run guard (see Behavior).
 
 Behavior:
