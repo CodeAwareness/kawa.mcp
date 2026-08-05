@@ -104,13 +104,51 @@ Disable telemetry with `KAWA_PRE_EDIT_TELEMETRY=off`.
 
 ## Key Features
 
-- **Real-time team conflict detection** — see when a teammate is editing the same files or lines in their working copy, *before either of you commits*. Most version-control tooling shows you this after the merge conflict; Kawa shows you before.
+- **Real-time team conflict detection** — see when a teammate is editing the same files or lines in their working copy, *before either of you commits*. Most version-control tooling shows you this after the merge conflict; Kawa shows you before. Kawa can also *judge* an overlap and apply the safe tier of merge for you — though that write only happens [in an agent-owned worktree](#auto-resolution-requires-a-worktree).
 - **Cross-session AI memory** — your AI assistant picks up where it left off across days, branches, and machines. No re-explaining the architecture every morning.
 - **Decision history with reasoning** — record forks, trade-offs, and abandoned approaches with their *why*. Future sessions and teammates inherit the context instead of re-deriving it.
 - **Commit ↔ intent linkage** — every commit is automatically associated with the intent that drove it. `git log` shows what changed; Kawa shows why.
 - **Smart context retrieval** — relevance-based loading; only what the current task needs.
 - **Zero-knowledge encryption** — code blocks encrypted client-side before sync. The Kawa cloud cannot decrypt your team's code.
 - **Cross-platform** — works with Claude Code, Cursor, and any MCP-compatible AI assistant.
+
+## Running several agents in parallel
+
+Kawa Code is built for more than one worker on a repository at a time — that's what the conflict detection is *for*. If those workers are AI agents you're running yourself, give each one its own [git worktree](https://git-scm.com/docs/git-worktree). Agents sharing a single checkout overwrite each other's edits with no conflict marker and no git history: nothing is committed between the two writes, so nothing notices.
+
+### Set up worktrees
+
+In Claude Code, background sessions already require a worktree — `worktree.bgIsolation` defaults to `"worktree"`, which blocks edits to the main checkout until the session enters one. You only need to touch it if a project has explicitly opted out with `"none"`. Subagents take `isolation: "worktree"` per spawn.
+
+Two settings are worth tuning, because the defaults surprise people:
+
+```json
+{
+  "worktree": {
+    "baseRef": "head",
+    "symlinkDirectories": ["node_modules", "target"]
+  }
+}
+```
+
+- **`baseRef`** — defaults to `"fresh"`, which branches from `origin/<default-branch>`. If you work on unpushed commits, set `"head"` to branch from your local HEAD instead. Either way this is a *commit* boundary: uncommitted working-tree changes don't travel into a new worktree, so land your work before spawning agents that need it.
+- **`symlinkDirectories`** — nothing is symlinked unless you say so, meaning every worktree gets its own build directory. For interpreted projects that's an annoyance; for compiled ones it's a wall. Measure before you scale out: a mature Rust `target/` runs to hundreds of gigabytes, and three worktrees means three copies. Symlinking shares one. The trade-off is that most build tools lock a shared output directory, so parallel *builds* serialize even though the agents don't — a compiler cache is the fix for that, not more copies.
+
+### Keeping agents from colliding
+
+Isolation alone would just give you several agents doing overlapping work in private. Kawa's job is the coordination on top.
+
+Each agent session gets its own identity, and intents are tracked **per session** — so several intents can be active on one repository at once, each with its own current focus, without a lock and without agents clobbering each other's context. From there the normal machinery applies across agents exactly as it does across teammates: `get_relevant_context` surfaces what the *other* agents have already decided, `create_and_activate_intent` reports a conflict when new work overlaps something already in flight, and the pre-edit check fires on reasoning any of them recorded.
+
+The practical result: your agents inherit each other's decisions instead of re-deriving them, and you find out about overlapping work while it's still cheap to redirect — not at merge time.
+
+### Auto-resolution requires a worktree
+
+Kawa can do more than *report* an overlap — `arbiter_resolve` judges each one, and `arbiter_apply` will write the safe tier of merge for you. That write is deliberately gated:
+
+> `arbiter_apply` writes **only in an agent-owned worktree**. On a human checkout — or when a peer holds the file-set lock — it stays suggest-only.
+
+This is the sharpest practical reason to put agents in worktrees. Run them on a shared checkout and auto-resolution silently never engages; you get the conflict surfaced and nothing else, with no error to tell you a capability was switched off. The guardrail is intentional — Kawa won't rewrite a human's working tree underneath them — but it does mean the setup decides whether half the feature is available.
 
 ## Handing off work to a teammate (no session export)
 
