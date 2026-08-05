@@ -14,7 +14,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 
 import { connectToMuninn, ensureRepo } from './services/muninn-ipc.js'
-import { salvageMangledArgs } from './tools/_salvage-mangled-args.js'
+import { resolveMangledArgs, describeChainedArgs } from './tools/_mangled-args.js'
 
 import {
   allTools,
@@ -94,18 +94,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // A malformed tool-call block (a parameter closed with `</fieldName>` instead
   // of the required closing tag, followed by one opened without the required
   // prefix) makes the harness fold the next field's name AND value into the
-  // preceding string. Recover them before dispatch — one seam covers every
-  // tool. Guarded and logged, never silent: see _salvage-mangled-args.ts.
+  // preceding string. One seam covers every tool. A single absorbed field is
+  // put back mechanically; a chain is refused rather than reconstructed, so the
+  // model re-emits. Both outcomes are logged. See _mangled-args.ts.
   let args = rawArgs
   const schema = allTools.find(t => t.name === name)?.inputSchema
   if (args && typeof args === 'object' && schema) {
-    const { args: repaired, salvaged } = salvageMangledArgs(
+    const { args: repaired, salvaged, chained } = resolveMangledArgs(
       args as Record<string, unknown>,
       Object.keys(schema.shape),
     )
+    if (chained.length > 0) {
+      const message = describeChainedArgs(name, chained)
+      // stderr only — stdout is the MCP transport.
+      console.error(`[MuninnIPC] ${message}`)
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: false, error: message, tool: name }, null, 2),
+          },
+        ],
+        isError: true,
+      }
+    }
     if (salvaged.length > 0) {
       args = repaired
-      // stderr only — stdout is the MCP transport.
       console.error(
         `[MuninnIPC] Recovered ${salvaged.length} malformed argument(s) for ${name}: ` +
           salvaged.map(s => `${s.field} (absorbed by ${s.fromField})`).join(', '),
