@@ -129,8 +129,17 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   // back instead of the client hanging up first. Mirrors inference:estimate's
   // ESTIMATE_TIMEOUT_MS (decision 092172fb: per-call override, not a raised global).
   const COMPLETE_TIMEOUT_MS = 180_000
+  // `repoPath` is forwarded (not just used to derive the origin) because Muninn's
+  // dispatcher reads it to trigger the agent worktree-diff publish on completion.
+  // That trigger has read `data["repoPath"]` since it was written, but this payload
+  // never carried the field — so it never fired once, and agent publishing was zero
+  // from 2026-06-06 until W1a (kawa.muninn decision 95de7391). Muninn resolving the
+  // path from the origin instead is NOT an option: with several checkouts of one
+  // origin (worktree-per-intent) that lookup is first-match over a HashMap and
+  // therefore non-deterministic.
   const res = await request('intent', 'complete', {
     repoOrigin: actualOrigin,
+    repoPath: input.repoPath,
     intentId: input.intentId,
     status: input.status,
     commitSha: input.commitSha,
