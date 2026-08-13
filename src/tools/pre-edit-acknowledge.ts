@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { forkFieldsExtensions } from './_fork-fields.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { emitActedOn } from '../telemetry.js'
 
@@ -32,7 +31,6 @@ export const preEditAcknowledgeSchema = z.object({
     .string()
     .optional()
     .describe('Local path to the repository root. Enables repo attribution of the acted-on value-metric.'),
-  ...forkFieldsExtensions,
 })
 
 export type PreEditAcknowledgeInput = z.infer<typeof preEditAcknowledgeSchema>

@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 /**
  * arbiter_apply — thin forwarder to Muninn `arbiter:apply` (Arbiter v2).
@@ -33,7 +32,6 @@ export const arbiterApplySchema = z.object({
   overlaps: z
     .array(overlapSchema)
     .describe('The overlaps to resolve — each { peerUid, filePath, ranges } from the Stop collision report.'),
-  ...forkFieldsExtensions,
 })
 
 export type ArbiterApplyInput = z.infer<typeof arbiterApplySchema>
@@ -45,7 +43,6 @@ export async function arbiterApply(input: ArbiterApplyInput): Promise<any> {
     repoPath: input.repoPath,
     intentId: input.intentId,
     overlaps: input.overlaps,
-    ...extractForkFields(input),
   })
   return res
 }

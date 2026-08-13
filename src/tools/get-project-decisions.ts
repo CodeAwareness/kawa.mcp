@@ -1,12 +1,10 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const getProjectDecisionsSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
-  ...forkFieldsExtensions,
 })
 
 export type GetProjectDecisionsInput = z.infer<typeof getProjectDecisionsSchema>
@@ -38,7 +36,6 @@ export async function getProjectDecisions(input: GetProjectDecisionsInput): Prom
   const actualOrigin = resolveOrigin(input.repoOrigin, input.repoPath)
   const res = await request('decision', 'project-list', {
     repoOrigin: actualOrigin,
-    ...extractForkFields(input),
   })
 
   const decisions: ProjectDecision[] = (res.decisions || []).map((d: any) => ({

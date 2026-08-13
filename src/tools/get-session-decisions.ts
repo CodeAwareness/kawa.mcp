@@ -1,13 +1,11 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const getSessionDecisionsSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
   intentId: z.string().describe('The intent ID to get decisions for'),
-  ...forkFieldsExtensions,
 })
 
 export type GetSessionDecisionsInput = z.infer<typeof getSessionDecisionsSchema>
@@ -41,7 +39,6 @@ export async function getSessionDecisions(input: GetSessionDecisionsInput): Prom
   const res = await request('decision', 'list', {
     repoOrigin: actualOrigin,
     intentId: input.intentId,
-    ...extractForkFields(input),
   })
 
   const decisions: DecisionPoint[] = (res.decisions || []).map((d: any) => ({

@@ -1,14 +1,12 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const detectIntentConflictsSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
   intentId: z.string().describe('The active intent ID'),
   minScore: z.number().optional().describe('Minimum similarity score threshold (default: 0.5)'),
-  ...forkFieldsExtensions,
 })
 
 export type DetectIntentConflictsInput = z.infer<typeof detectIntentConflictsSchema>
@@ -42,7 +40,6 @@ export async function detectIntentConflicts(input: DetectIntentConflictsInput): 
     repoOrigin: actualOrigin,
     intentId: input.intentId,
     minScore: input.minScore,
-    ...extractForkFields(input),
   })
 
   if (res.error) {

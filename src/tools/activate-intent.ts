@@ -1,13 +1,11 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const activateIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
   intentId: z.string().describe('The cloud ID (preferred) or local UUID of the existing intent to activate.'),
-  ...forkFieldsExtensions,
 })
 
 export type ActivateIntentInput = z.infer<typeof activateIntentSchema>
@@ -46,7 +44,6 @@ export async function activateIntent(input: ActivateIntentInput): Promise<Activa
   const res = await request('intent', 'set-active', {
     repoOrigin: actualOrigin,
     intentId: input.intentId,
-    ...extractForkFields(input),
   })
 
   // A failed set-active must not be reported as an activation. The main case is

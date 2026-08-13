@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 import { activateIntent } from './activate-intent.js'
 import { getProjectDecisions, type ProjectDecision } from './get-project-decisions.js'
 
@@ -22,7 +21,6 @@ export const resumeIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
   intentId: z.string().describe('The cloud ID (preferred) or local UUID of the intent to resume — e.g. the id from a "follow up on intent <id>" handoff.'),
-  ...forkFieldsExtensions,
 })
 
 export type ResumeIntentInput = z.infer<typeof resumeIntentSchema>
@@ -42,7 +40,7 @@ export async function resumeIntent(input: ResumeIntentInput): Promise<ResumeInte
   // Resolve the origin once and pass it down, so the three sub-calls don't each
   // re-shell out to git.
   const origin = resolveOrigin(input.repoOrigin, input.repoPath)
-  const base = { repoOrigin: origin, repoPath: input.repoPath, ...extractForkFields(input) }
+  const base = { repoOrigin: origin, repoPath: input.repoPath }
 
   // 1. Adopt the intent as THIS session's current focus (multi-active — never
   //    displaces another session's current). Fail loud if it can't be activated.

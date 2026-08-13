@@ -1,13 +1,11 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 import { emitInjection, estimateTokens } from '../telemetry.js'
 
 export const checkActiveIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
-  ...forkFieldsExtensions,
 })
 
 export type CheckActiveIntentInput = z.infer<typeof checkActiveIntentSchema>
@@ -62,7 +60,6 @@ export async function checkActiveIntent(input: CheckActiveIntentInput): Promise<
 
   const res = await request('intent', 'get-active', {
     repoOrigin: actualOrigin,
-    ...extractForkFields(input),
   })
 
   // Muninn returns { hasActiveIntent, intentId, intent, activeIntents }.

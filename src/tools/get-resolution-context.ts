@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 /**
  * Thin proxy to Muninn's `pre-edit-check:resolution-context` handler (Layer C,
@@ -44,7 +43,6 @@ export const getResolutionContextSchema = z.object({
     .string()
     .optional()
     .describe('Active intent ID (advisory). Auto-detected by Kawa Code when omitted.'),
-  ...forkFieldsExtensions,
 })
 
 export type GetResolutionContextInput = z.infer<typeof getResolutionContextSchema>
@@ -83,7 +81,6 @@ export async function getResolutionContext(
   input: GetResolutionContextInput,
 ): Promise<GetResolutionContextResponse> {
   const repoOrigin = resolveOrigin(input.repoOrigin, input.repoPath)
-  const forkFields = extractForkFields(input)
 
   const res = await request('pre-edit-check', 'resolution-context', {
     repoOrigin,
@@ -92,7 +89,6 @@ export async function getResolutionContext(
     filePath: input.filePath,
     ranges: input.ranges,
     intentId: input.intentId,
-    ...forkFields,
   })
 
   return res as GetResolutionContextResponse

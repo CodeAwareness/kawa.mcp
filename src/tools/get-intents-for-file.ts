@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 /**
  * Merged from the former `get_intents_for_file` + `get_intents_for_lines` pair.
@@ -16,7 +15,6 @@ export const getIntentsForFileSchema = z.object({
   filePath: z.string().describe('Path to the file (relative to repo root)'),
   startLine: z.number().min(1).optional().describe('Start line (1-based). Provide with endLine to narrow to a range.'),
   endLine: z.number().min(1).optional().describe('End line (1-based, inclusive). Provide with startLine to narrow to a range.'),
-  ...forkFieldsExtensions,
 })
 
 export type GetIntentsForFileInput = z.infer<typeof getIntentsForFileSchema>
@@ -84,7 +82,6 @@ export async function getIntentsForFile(input: GetIntentsForFileInput): Promise<
       repoOrigin: actualOrigin,
       filePath: input.filePath,
       ...(ranged ? { startLine: input.startLine, endLine: input.endLine } : {}),
-      ...extractForkFields(input),
     },
   )
 

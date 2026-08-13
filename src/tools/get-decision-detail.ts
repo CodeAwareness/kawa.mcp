@@ -1,13 +1,11 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const getDecisionDetailSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to the repository root'),
   decisionId: z.string().describe('The decision ID to expand (from a recall result, e.g. get_relevant_context)'),
-  ...forkFieldsExtensions,
 })
 
 export type GetDecisionDetailInput = z.infer<typeof getDecisionDetailSchema>
@@ -43,7 +41,6 @@ export async function getDecisionDetail(input: GetDecisionDetailInput): Promise<
   const res = await request('decision', 'detail', {
     repoOrigin: actualOrigin,
     decisionId: input.decisionId,
-    ...extractForkFields(input),
   })
 
   const d = res?.decision

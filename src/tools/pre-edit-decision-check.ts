@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 /**
  * Thin proxy to Muninn's `pre-edit-check:evaluate` handler.
@@ -40,7 +39,6 @@ export const preEditDecisionCheckSchema = z.object({
     .string()
     .optional()
     .describe('Session scope for the force-override cache. Defaults to the MCP server\'s SESSION_ID; PreToolUse hook callers should pass Claude Code\'s session_id so writes from one process are visible to the other.'),
-  ...forkFieldsExtensions,
 })
 
 export type PreEditDecisionCheckInput = z.infer<typeof preEditDecisionCheckSchema>
@@ -73,7 +71,6 @@ export async function preEditDecisionCheck(
   input: PreEditDecisionCheckInput,
 ): Promise<PreEditDecisionCheckResponse> {
   const repoOrigin = resolveOrigin(input.repoOrigin, input.repoPath)
-  const forkFields = extractForkFields(input)
 
   const res = await request('pre-edit-check', 'evaluate', {
     repoOrigin,
@@ -83,7 +80,6 @@ export async function preEditDecisionCheck(
     endLine: input.endLine,
     intentId: input.intentId,
     sessionToken: input.sessionToken,
-    ...forkFields,
   })
 
   return res as PreEditDecisionCheckResponse

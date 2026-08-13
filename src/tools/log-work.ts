@@ -1,14 +1,12 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 export const logWorkSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
   repoPath: z.string().describe('Local path to repository root'),
   title: z.string().max(200).describe('Short description of the work done'),
   files: z.array(z.string()).optional().describe('File paths modified (relative to repo root)'),
-  ...forkFieldsExtensions,
 })
 
 export type LogWorkInput = z.infer<typeof logWorkSchema>
@@ -26,7 +24,6 @@ export async function logWork(input: LogWorkInput): Promise<LogWorkResponse> {
     repoOrigin: origin,
     title: input.title,
     files: input.files || [],
-    ...extractForkFields(input),
   })
 
   // Positive receipt required: a logged work item always comes back with an id.

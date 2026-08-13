@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 const constraintViolationSchema = z.object({
   alternative: z.string(),
@@ -31,7 +30,6 @@ export const editSessionDecisionSchema = z.object({
   decisionId: z.string().describe('The decision ID to edit or delete'),
   action: z.enum(['update', 'delete']).describe('Action to perform: update modifies the decision, delete removes it'),
   updates: decisionUpdatesSchema.optional().describe('Partial fields to update (only for action=update)'),
-  ...forkFieldsExtensions,
 })
 
 export type EditSessionDecisionInput = z.infer<typeof editSessionDecisionSchema>
@@ -49,7 +47,6 @@ export async function editSessionDecision(input: EditSessionDecisionInput): Prom
     decisionId: input.decisionId,
     action: input.action,
     updates: input.updates,
-    ...extractForkFields(input),
   })
 
   // No id receipt exists for an update/delete, so require an EXPLICIT

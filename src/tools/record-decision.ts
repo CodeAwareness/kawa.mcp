@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
-import { forkFieldsExtensions, extractForkFields } from './_fork-fields.js'
 
 const constraintViolationSchema = z.object({
   alternative: z.string().describe('The alternative that was rejected'),
@@ -45,7 +44,6 @@ export const recordDecisionSchema = z.object({
     baselineSha: z.string().optional().describe('The cSHA baseline the ranges are expressed in.'),
   }).optional()
     .describe('Layer C audit — set ONLY when this decision records how you resolved a completion-time code collision (i.e. after complete_intent returned resolution_required). Links the decision to the live peer you yielded to or overrode.'),
-  ...forkFieldsExtensions,
 })
 
 export type RecordDecisionInput = z.infer<typeof recordDecisionSchema>
@@ -78,7 +76,6 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
     appliesWhen: input.appliesWhen,
     surface: input.surface,
     resolvedCollision: input.resolvedCollision,
-    ...extractForkFields(input),
   })
 
   // A persisted decision ALWAYS has an id. Anything else — an explicit
