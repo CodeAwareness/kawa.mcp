@@ -183,8 +183,7 @@ For each group:
 |------|-------------|
 | \`check_active_intent\` | Before starting any code task |
 | \`create_and_activate_intent\` | When no active intent and user requests code changes |
-| \`get_intents_for_file\` | Before modifying files (check for team conflicts) |
-| \`get_intents_for_lines\` | Before modifying specific line ranges |
+| \`get_intents_for_file\` | Before modifying files (check for team conflicts); add \`startLine\`/\`endLine\` for a specific range |
 | \`complete_intent\` | After successful git commit, or to abandon |
 | \`list_team_intents\` | To see what teammates are working on |
 

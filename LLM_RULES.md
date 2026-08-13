@@ -193,8 +193,7 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | `check_active_intent` | Check for active intent before starting work |
 | `create_and_activate_intent` | Create new intent for a task |
 | `resume_intent` | Resume an existing intent by id in one call (activate + load its decisions) — use for a "follow up on intent &lt;id&gt;" handoff instead of creating a new one |
-| `get_intents_for_file` | Check for team conflicts on a file |
-| `get_intents_for_lines` | Check for conflicts on specific lines |
+| `get_intents_for_file` | Check for team conflicts on a file; pass `startLine`/`endLine` to narrow to a line range |
 | `assign_blocks_to_intent` | Associate code changes with intent |
 | `complete_intent` | Mark intent as committed/done/abandoned |
 | `update_intent` | Reformulate an intent's title, description, scope, or constraints as understanding evolves |
@@ -215,14 +214,7 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 
 | Tool | Purpose |
 |------|---------|
-| `infer_history` | Analyze git commit history to extract development stories and decisions |
-| `evolve_decisions` | Re-curate previously extracted stories so only the decisions still worth keeping are persisted |
-
-#### Feature Catalog
-
-| Tool | Purpose |
-|------|---------|
-| `update_features` | Group the repo's not-yet-categorized intents into the running feature catalog (additive) |
+| `infer_history` | One-time-ish: mine git history into intents and decisions. Estimate first, then run. Decision curation runs automatically as its final phase |
 
 #### Lightweight Logging
 
@@ -278,9 +270,9 @@ Use the infer_history tool with estimateOnly: true to preview the cost first,
 then run it with estimateOnly: false.
 ```
 
-### `evolve_decisions`
+### Feature catalog
 
-Re-curates a pre-existing set of stories (e.g., from a previous `infer_history` run) so that only the decisions still worth keeping are persisted. `infer_history` already performs this curation automatically — use `evolve_decisions` only when you want to run it separately on existing stories.
+There is no MCP tool for this. Rebuild the catalog from the **Features** panel in the Kawa Code app — **Update features** (additive) or **Rebuild** (cold, keeps locked features). It also extends automatically after an `infer_history` run.
 
 ---
 

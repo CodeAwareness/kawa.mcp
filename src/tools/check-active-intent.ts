@@ -114,28 +114,9 @@ export async function checkActiveIntent(input: CheckActiveIntentInput): Promise<
 
 export const checkActiveIntentTool = {
   name: 'check_active_intent',
-  description: `REQUIRED: Call this tool BEFORE writing any code.
+  description: `REQUIRED before writing any code. Returns this session's current intent; if there is none, confirm the details with the user and call create_and_activate_intent.
 
-Returns THIS session's current intent (\`intent\` / \`hasActiveIntent\`) if one is
-set. If not, ask the user to confirm intent details and then call
-create_and_activate_intent.
-
-Multi-active model: the active intent is PER SESSION. Many intents can be active
-on a repo at once — your current is independent of other sessions'/teammates'.
-The response also includes \`activeIntents\`: the repo's full active set (every
-session's current intent, with id/title/status/createdBy/author) for awareness
-and orchestration. \`hasActiveIntent\` reflects only YOUR session; \`activeIntents\`
-may be non-empty even when you have no current.
-
-An active intent tracks what the user is working on, enabling:
-- Better code context for AI-generated changes
-- Conflict detection with team members
-- Automatic assignment of code blocks to the intent
-
-Status semantics:
-- "active" — normal, in-progress. A stale intent simply stays "active"; the
-  sweeper preserves its work without any status transition.
-- terminal states — committed / pushed / done / abandoned / superseded.`,
+Intents are active PER SESSION — many can be active on one repo at once. hasActiveIntent reflects only YOUR session, while activeIntents lists every session's current intent (yours and teammates') and may be non-empty when you have none. A stale intent stays "active"; terminal states are committed / pushed / done / abandoned / superseded.`,
   inputSchema: checkActiveIntentSchema,
   handler: checkActiveIntent
 }

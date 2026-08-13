@@ -24,7 +24,6 @@ import {
   activateIntent,
   resumeIntent,
   getIntentsForFile,
-  getIntentsForLines,
   listTeamIntents,
   completeIntent,
   updateIntent,
@@ -36,8 +35,6 @@ import {
   editSessionDecision,
   detectIntentConflicts,
   inferHistory,
-  evolveDecisions,
-  updateFeatures,
   preEditDecisionCheck,
   preEditAcknowledge,
   getResolutionContext,
@@ -154,9 +151,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_intents_for_file':
         result = await getIntentsForFile(args as any)
         break
-      case 'get_intents_for_lines':
-        result = await getIntentsForLines(args as any)
-        break
       case 'list_team_intents':
         result = await listTeamIntents(args as any)
         break
@@ -189,12 +183,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'infer_history':
         result = await inferHistory(args as any)
-        break
-      case 'evolve_decisions':
-        result = await evolveDecisions(args as any)
-        break
-      case 'update_features':
-        result = await updateFeatures(args as any)
         break
       case 'pre_edit_decision_check':
         result = await preEditDecisionCheck(args as any)

@@ -134,7 +134,7 @@ Single client — owns the socket connection lifecycle, message framing, and `en
 2. Add a case to the dispatcher switch in `src/index.ts`.
 3. Re-export the handler and tool from `src/tools/index.ts`.
 4. Add an entry to `LLM_RULES.md` — it's the public reference clients pull from.
-5. If the tool ships any user-facing description text that explains an algorithm (e.g. evolve_decisions), keep it generic — the algorithm itself is a trade secret living in Muninn.
+5. If the tool ships any user-facing description text that explains an algorithm (e.g. `infer_history`, whose final phase is the decision-evolution graph), keep it generic — the algorithm itself is a trade secret living in Muninn.
 
 ---
 

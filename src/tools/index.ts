@@ -4,7 +4,6 @@ import { createAndActivateIntentTool, createAndActivateIntent, createAndActivate
 import { activateIntentTool, activateIntent, activateIntentSchema } from './activate-intent.js'
 import { resumeIntentTool, resumeIntent, resumeIntentSchema } from './resume-intent.js'
 import { getIntentsForFileTool, getIntentsForFile, getIntentsForFileSchema } from './get-intents-for-file.js'
-import { getIntentsForLinesTool, getIntentsForLines, getIntentsForLinesSchema } from './get-intents-for-lines.js'
 import { listTeamIntentsTool, listTeamIntents, listTeamIntentsSchema } from './list-team-intents.js'
 import { completeIntentTool, completeIntent, completeIntentSchema } from './complete-intent.js'
 import { updateIntentTool, updateIntent, updateIntentSchema } from './update-intent.js'
@@ -16,8 +15,6 @@ import { getDecisionDetailTool, getDecisionDetail, getDecisionDetailSchema } fro
 import { editSessionDecisionTool, editSessionDecision, editSessionDecisionSchema } from './edit-session-decision.js'
 import { detectIntentConflictsTool, detectIntentConflicts, detectIntentConflictsSchema } from './detect-intent-conflicts.js'
 import { inferHistoryTool, inferHistory, inferHistorySchema } from './infer-history.js'
-import { evolveDecisionsTool, evolveDecisions, evolveDecisionsSchema } from './evolve-decisions.js'
-import { updateFeaturesTool, updateFeatures, updateFeaturesSchema } from './update-features.js'
 import { preEditDecisionCheckTool, preEditDecisionCheck, preEditDecisionCheckSchema } from './pre-edit-decision-check.js'
 import { preEditAcknowledgeTool, preEditAcknowledge, preEditAcknowledgeSchema } from './pre-edit-acknowledge.js'
 import { getResolutionContextTool, getResolutionContext, getResolutionContextSchema } from './get-resolution-context.js'
@@ -46,9 +43,6 @@ export {
   getIntentsForFileTool,
   getIntentsForFile,
   getIntentsForFileSchema,
-  getIntentsForLinesTool,
-  getIntentsForLines,
-  getIntentsForLinesSchema,
   listTeamIntentsTool,
   listTeamIntents,
   listTeamIntentsSchema,
@@ -86,13 +80,7 @@ export {
   inferHistoryTool,
   inferHistory,
   inferHistorySchema,
-  evolveDecisionsTool,
-  evolveDecisions,
-  evolveDecisionsSchema,
   // Feature catalog
-  updateFeaturesTool,
-  updateFeatures,
-  updateFeaturesSchema,
   // Pre-edit decision check
   preEditDecisionCheckTool,
   preEditDecisionCheck,
@@ -120,7 +108,6 @@ export const allTools = [
   activateIntentTool,
   resumeIntentTool,
   getIntentsForFileTool,
-  getIntentsForLinesTool,
   listTeamIntentsTool,
   completeIntentTool,
   updateIntentTool,
@@ -136,9 +123,7 @@ export const allTools = [
   detectIntentConflictsTool,
   // Inference pipeline tools
   inferHistoryTool,
-  evolveDecisionsTool,
   // Feature catalog
-  updateFeaturesTool,
   // Pre-edit decision check
   preEditDecisionCheckTool,
   preEditAcknowledgeTool,

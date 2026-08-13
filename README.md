@@ -186,6 +186,50 @@ The payoff compounds: the port doesn't re-litigate settled arguments or faithful
 
 The [CLAUDE.md template](./CLAUDE.md.example) ships a compact version of this workflow, so agents set up through the Kawa Code welcome flow follow it automatically.
 
+## Occasional operations
+
+Most Kawa tools run every turn — check the active intent, recall context, record a decision. The operations below are different: you run them **rarely**, sometimes once per repository. They cost real time and money, and they are not part of the per-turn loop.
+
+### Seeding a repo from its git history — `infer_history`
+
+A brand-new Kawa repo knows nothing about work that predates it. `infer_history` mines the existing commit history into intents and decisions, so recall has something to draw on from day one. Run it **once** when you connect a repo with meaningful history; after that it extends incrementally.
+
+It is agent-invoked — ask your assistant, e.g. *"Run infer_history with max 3000 commits"*. There is no button for it in the Kawa Code app.
+
+**Always estimate first.** The tool defaults to `estimateOnly: true`, which returns a token/cost preview without running anything. Look at the number, then re-run with `estimateOnly: false` to actually start. A run is asynchronous — it returns immediately and reports progress in the Kawa Code app — and resumes from where it stopped if interrupted.
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `estimateOnly` | `true` | Preview cost without running. Set `false` to execute. |
+| `commits` | resume | How many recent commits to analyze. Omit to continue from the last run. |
+| `commitRange` | — | Git revspec (`sha1..sha2`, `branch1..branch2`, `sha1^!`) for a specific window. Mutually exclusive with `commits`. Good for backfilling a PR or recovering a dropped batch. |
+| `contextIssues` | `false` | Pull in PR/MR descriptions and issue discussions. Needs an authenticated `gh` or `glab`; silently skipped otherwise. |
+| `allowCommitSplitting` | `false` | Enable when one commit often mixes unrelated changes. |
+| `maxStories` | — | Per-run cap on stories analyzed. |
+| `model` | — | Affects the **estimate only**. The run's model is configured in the Kawa Code app. |
+| `force` | `false` | Override the re-run guard — see below. |
+
+**The re-run guard.** If the repo already has intents and the run can't cleanly resume (missing or unreachable cursor), or `HEAD` isn't on the default branch, the call stops and returns `needsDecision` instead of running. That's deliberate: re-running blind duplicates intents. Read the reason, and only pass `force: true` if it genuinely applies. Prefer running on `main`/`master`; `force` exists for the deliberate feature-branch case.
+
+GitHub and GitLab are both supported; the forge is detected from the remote origin.
+
+### Decision evolution — automatic, no call needed
+
+Curating decisions into an evolution graph is **phase 5 of `infer_history`**, run automatically once the analysis completes. There is no separate step and nothing to invoke.
+
+> Earlier versions exposed an `evolve_decisions` tool. It has been removed: it required a `stories` array that only ever existed inside the pipeline's own memory, so no assistant could construct a valid call. Nothing is lost — the curation still runs, as part of `infer_history`.
+
+### Updating the feature catalog — use the Features panel
+
+Features group a repo's intents into a browsable catalog. Rebuild it from the **Features** panel in the Kawa Code app:
+
+- **Update features** — additive. Folds intents that aren't in the catalog yet into the existing features. This is the everyday action.
+- **Rebuild** — cold rebuild from scratch, keeping locked features. Use when the catalog has drifted badly.
+
+Progress shows in the app, and the catalog also extends automatically after an `infer_history` run.
+
+> Earlier versions exposed an `update_features` MCP tool that sent the same request as the **Update features** button. It has been removed — one button and one tool doing the identical thing meant every session paid for a tool schema it never needed. Press the button instead.
+
 ## Development
 
 ```bash

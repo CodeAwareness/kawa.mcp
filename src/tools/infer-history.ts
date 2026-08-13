@@ -175,28 +175,13 @@ export async function inferHistory(input: InferHistoryInput): Promise<InferHisto
 
 export const inferHistoryTool = {
   name: 'infer_history',
-  description: `Analyze a repository's git commit history and produce structured development knowledge (intents and decisions) for the repo.
+  description: `One-time-ish bootstrap: mine a repo's git history into intents and decisions. Rare — use it to seed a repo that has no recorded history yet, or to extend coverage after many new commits. NOT part of the per-turn workflow.
 
-When to use:
-- To bootstrap a repository that has no recorded intents/decisions yet.
-- To extend coverage for new commits since the last run (resumes automatically when no \`commits\` value is provided).
+Costs real money and time, so it is a two-step call: run with estimateOnly (the default) to preview tokens/cost, show the user, then re-call with estimateOnly: false only if they agree. The run is asynchronous and reports progress in the Kawa Code app; it resumes automatically if interrupted.
 
-Inputs of note:
-- \`estimateOnly\` (default true): returns a token/cost estimate without running. Call with \`estimateOnly: true\` first to preview cost, then re-call with \`estimateOnly: false\` to run.
-- \`commits\` (optional): how many recent commits to analyze. Omit to resume from where the last run stopped (or fall back to a sensible default on first run).
-- \`commitRange\` (optional): git revspec selecting a specific window — \`"sha1..sha2"\`, \`"branch1..branch2"\`, \`"sha1^!"\` for a single commit. Mutually exclusive with \`commits\`. Useful for recovering from dropped batches or backfilling specific PRs / branches without re-running the full history.
-- \`contextIssues\`: include PR/MR descriptions and issue discussions when an authenticated forge CLI (\`gh\` or \`glab\`) is available; auto-skipped otherwise.
-- \`allowCommitSplitting\`: enable when commit history is messy and a single commit may cover unrelated changes.
-- \`maxStories\`: per-run cap on how many stories are analyzed.
-- \`model\`: affects the cost estimate only — it does not choose the model the run uses. The run's model is configured in the Kawa Code app.
-- \`force\` (default false): override the re-run guard (see Behavior).
+Re-run guard — do not defeat this casually. If the repo already has intents and the run cannot cleanly resume, or HEAD is not on the default branch, the call STOPS and returns needsDecision rather than running, because re-running blind risks duplicate intents. Show the user the reason and only re-call with force: true if they confirm. Prefer running on main/master.
 
-Behavior:
-- A run is asynchronous — returns immediately with a started/pending status; progress is reported separately.
-- Results are persisted as intents and decisions for the repo on completion.
-- If interrupted, re-running resumes from where it left off.
-- Re-run guard: a clean incremental resume runs automatically. But if the repo already has intents and the run cannot cleanly resume (missing/unreachable cursor), or HEAD is not on the default branch, the call STOPS and returns \`needsDecision\` instead of running — re-running blind there risks duplicate intents. Present the reason to the user and, if they confirm, re-call with \`force: true\`. Run on the default branch (main/master) whenever possible; inferring a feature branch is what \`force\` is for.
-- GitHub and GitLab are supported; the forge is detected from the remote origin.`,
+Omit commits to resume from the last run. See the README for the full parameter list.`,
   inputSchema: inferHistorySchema,
   handler: inferHistory
 }

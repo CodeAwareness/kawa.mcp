@@ -247,52 +247,17 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
 
 export const completeIntentTool = {
   name: 'complete_intent',
-  description: `Mark the active intent as completed and clear it.
+  description: `Mark the active intent completed and clear it. Call after a successful git commit, passing commitSha so code blocks are captured.
 
-Call this after a successful git commit to:
-1. Update the intent status (committed/pushed/done/abandoned)
-2. Store the commit SHA for tracking
-3. Clear the active intent so a new one can be started
+status: committed (default, local commit) | pushed | done | abandoned.
 
-Status values:
-- "committed": Code is committed locally (default)
-- "pushed": Code has been pushed to remote
-- "done": Work is fully complete
-- "abandoned": Work was discarded without committing
+You MUST inspect the response:
 
-REQUIRED: Inspect the response after calling this tool. Three outcomes:
+- success === true — done. If committedDecisionCount > 0, say N decisions were recorded; do NOT list them. If apiSyncDeferred, say the sync was deferred and will replay. If collisions is non-empty, relay it as an advisory coordination heads-up (collisions[].label + files) — the completion still succeeded. If deferredConflicts is non-empty, the completion ALSO succeeded; say "N decision(s) need a disposition in the Kawa Code panel" and do NOT re-run this tool.
 
-1. response.success === true:
-   The task is complete. Briefly acknowledge the commit and — if
-   response.committedDecisionCount > 0 — mention that N distilled architectural
-   decisions were recorded for the intent. Do NOT enumerate the decisions
-   inline; they're visible via the orchestration panel and via
-   get_intent_decisions / get_relevant_context if the user wants details.
-   If response.apiSyncDeferred === true, also mention that the API sync was
-   deferred; the queued writes will replay on the next sync tick.
-   If response.collisions is non-empty, a live collaborator's (HAI's)
-   in-progress edits overlap the work you just completed — surface it as a
-   coordination heads-up (who, and which files), naming response.collisions[].label
-   and the files. It's advisory, not a failure; the completion still succeeded.
-   If response.deferredConflicts is non-empty, the distillation produced N
-   decisions that conflict with existing standards — the completion STILL
-   SUCCEEDED (the commit landed: status flipped, code blocks captured). Those
-   decisions are deferred: parked for a disposition in the Orchestration panel,
-   where the user picks per decision: supersede the standard, keep both (records
-   a "contradicts" edge for a deliberate divergence / false positive), or reject
-   the distilled decision. Tell the user "N decision(s) need a disposition in
-   the panel." There is NOTHING to retry — do NOT re-run complete_intent.
+- success === false && reason === "transient-failure" — the intent stays active and nothing was lost. Report failedStage plus the error; retry once the cause clears, or abandon if it persists.
 
-2. response.success === false AND response.reason === "transient-failure":
-   The distiller LLM call or the conflict-check API call errored. The
-   ephemerals are preserved (the bucket is intact), and the intent stays
-   "active". Tell the user the failure stage (response.failedStage) and the
-   underlying error, then suggest retrying once the issue clears, or
-   abandoning if the failure persists.
-
-3. In a non-interactive (autonomous) session: if response.deferredConflicts is
-   non-empty, log it at INFO and continue — the commit already landed and the
-   decisions await disposition in the panel. There is no blocking state.`,
+Autonomous sessions: deferredConflicts is not a blocking state — log and continue.`,
   inputSchema: completeIntentSchema,
   handler: completeIntent
 }
