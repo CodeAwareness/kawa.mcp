@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
+import { IntentRef, toIntentRef } from '../types/refs.js'
 
 export const getSessionDecisionsSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
@@ -29,7 +30,15 @@ export interface DecisionPoint {
 
 export interface GetSessionDecisionsResponse {
   intentId: string
-  intentIds: string[]
+  /**
+   * The intent these decisions belong to, named.
+   *
+   * Every decision here shares one parent — the caller named it — so this is a
+   * single ref, not one per row. Resolved cache-only by Kawa Code, so it is
+   * absent on a cold cache rather than costing a round trip to label an intent
+   * the caller already identified.
+   */
+  intent?: IntentRef
   decisions: DecisionPoint[]
   count: number
 }
@@ -58,7 +67,7 @@ export async function getSessionDecisions(input: GetSessionDecisionsInput): Prom
 
   return {
     intentId: input.intentId,
-    intentIds: [input.intentId],
+    intent: toIntentRef(res?.intent) ?? undefined,
     decisions,
     count: decisions.length
   }

@@ -103,7 +103,11 @@ export async function resumeIntent(input: ResumeIntentInput): Promise<ResumeInte
     count: decisions.length,
     message: intent
       ? `Resumed "${intent.title}" (${intent.status}) — ${decisions.length} recorded decision(s) loaded. Call get_decision_detail(id) for the full rationale on any of them.`
-      : `Resumed intent ${input.intentId.substring(0, 8)} — ${decisions.length} recorded decision(s) loaded.`,
+      // No title to lead with — `intent:get` returned nothing. Print the id in
+      // FULL: an intent id is a Mongo ObjectId whose leading bytes are a
+      // creation timestamp, so a truncated one does not resolve to a single
+      // intent and would leave the reader with nothing they can look up.
+      : `Resumed intent ${input.intentId} — ${decisions.length} recorded decision(s) loaded.`,
   }
 }
 

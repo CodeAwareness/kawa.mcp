@@ -153,6 +153,27 @@ Record when you:
 
 Do NOT record routine refactors, obvious bug fixes, version bumps, or formatting changes.
 
+### Referring to Intents and Decisions
+
+**Never refer to an intent or decision by ID alone in anything the user reads.** Lead with the title or summary, and **always** carry the ID in parentheses after it. The parenthesised ID is load-bearing, not decoration — it is the anchor Kawa Code matches to resolve the reference.
+
+- **Decisions** — an 8-char prefix is fine: `"Summary text" (7a7d1a36)`
+- **Intents** — use the **full 24-character ID**, never a prefix: `"Intent title" (6a34c9658212aa730480e0e6)`
+
+The asymmetry is unavoidable. Decision IDs are UUIDs, so their leading bits are uniformly random and an 8-char prefix identifies exactly one decision. Intent IDs are MongoDB ObjectIds, whose first 4 bytes are a **creation timestamp** — two intents created in the same second by the same process share their first 18 hex characters. A truncated intent ID is not merely collision-prone; it does not identify a single intent at all.
+
+So instead of:
+
+> ❌ `7a7d1a36 supersedes 2cc444ec, which superseded 97c701e7`
+
+write:
+
+> ✅ `"Bare-id lineage is unreadable" (7a7d1a36) supersedes "Force-bypass on retarget" (2cc444ec)`
+
+The references you need come pre-resolved. `get_decision_detail` returns `supersededDecisions[]` (each with `summary` and a `depth`: 1 = directly superseded, 2 = what *that* one superseded) and `intents[]` with titles — so there is no extra lookup to make.
+
+The same rule applies when passing IDs *back in*: `record_decision(supersedes: […])` requires **full** decision IDs. A truncated prefix is rejected, because resolving it would mean guessing which decision you meant. If you only have a prefix — read out of a document, say — resolve it with `get_decision_detail` first.
+
 ### Commit Flow
 
 When committing:

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { request } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
+import { IntentRef, nameIntent, toIntentRef } from '../types/refs.js'
 
 export const activateIntentSchema = z.object({
   repoOrigin: z.string().optional().describe('Git remote origin URL. Auto-detected from repoPath via git if not provided.'),
@@ -15,6 +16,10 @@ export interface ActivateIntentResponse {
   intentId: string
   action?: 'activated' | 'already_active'
   previousActiveId?: string
+  /** The now-current intent, named. Absent when Kawa Code could not resolve it. */
+  activeIntent?: IntentRef
+  /** The intent this replaced, named. Absent when there was none, or it did not resolve. */
+  previousActive?: IntentRef
   /** True when activation was refused because the intent is frozen (stale beyond the freeze window). */
   frozen?: boolean
   error?: string
@@ -34,7 +39,10 @@ export async function activateIntent(input: ActivateIntentInput): Promise<Activa
       intentId: input.intentId,
       action: 'already_active',
       previousActiveId,
-      message: `Intent ${input.intentId.substring(0, 8)} is already your current intent`,
+      // Intent ids are NEVER truncated: they are Mongo ObjectIds whose leading
+      // bytes are a timestamp, so a prefix does not identify a single intent.
+      // Here there is no title to lead with, so the full id is the answer.
+      message: `Intent ${input.intentId} is already your current intent`,
     }
   }
 
@@ -55,18 +63,25 @@ export async function activateIntent(input: ActivateIntentInput): Promise<Activa
       intentId: input.intentId,
       frozen: res.frozen === true,
       error: res.error || 'Could not activate this intent.',
-      message: res.error || `Could not activate intent ${input.intentId.substring(0, 8)}.`,
+      message: res.error || `Could not activate intent ${input.intentId}.`,
     }
   }
+
+  // Kawa Code resolves both ends of the switch, so the message can name them.
+  const activeIntent = toIntentRef(res?.activeIntent)
+  const previousActive = toIntentRef(res?.previousActive)
+  const activeName = nameIntent(activeIntent, input.intentId)
 
   return {
     success: true,
     intentId: input.intentId,
     action: 'activated',
     previousActiveId: previousActiveId || undefined,
+    activeIntent: activeIntent ?? undefined,
+    previousActive: previousActive ?? undefined,
     message: previousActiveId
-      ? `Switched current intent to ${input.intentId.substring(0, 8)} (was: ${previousActiveId.substring(0, 8)})`
-      : `Activated intent ${input.intentId.substring(0, 8)}`,
+      ? `Switched current intent to ${activeName} (was: ${nameIntent(previousActive, previousActiveId)})`
+      : `Activated intent ${activeName}`,
   }
 }
 

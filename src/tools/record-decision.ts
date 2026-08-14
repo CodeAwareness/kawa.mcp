@@ -21,7 +21,7 @@ export const recordDecisionSchema = z.object({
   consequences: z.string().optional().describe('Downstream implications of this decision'),
   symptom: z.string().optional().describe('Observable symptom that indicates this decision is relevant (e.g., error messages, runtime panics, unexpected behavior). Useful for discovery and constraint decisions.'),
   relatedFiles: z.array(z.string()).optional().describe('File paths affected by this decision'),
-  supersedes: z.array(z.string()).optional().describe('Decision IDs that this one replaces. When a later decision supersedes an earlier one, pass the earlier decisionId(s) here so the evolve pipeline can track the lineage.'),
+  supersedes: z.array(z.string()).optional().describe('Decision IDs that this one replaces. When a later decision supersedes an earlier one, pass the earlier decisionId(s) here so the evolve pipeline can track the lineage. Pass FULL decision IDs (36-char UUIDs) — a truncated 8-char prefix is rejected, because resolving it back would mean guessing which decision you meant. If you only have a prefix (e.g. read from a doc), look it up with get_decision_detail first and use the id it returns.'),
   constraintsChecked: z.array(z.string()).optional().describe('Which architectural constraints were verified before this decision'),
   constraintViolations: z.array(constraintViolationSchema).optional()
     .describe('Alternatives that were rejected due to constraint violations'),
@@ -51,6 +51,8 @@ export type RecordDecisionInput = z.infer<typeof recordDecisionSchema>
 export interface RecordDecisionResponse {
   recorded: boolean
   decisionId: string
+  /** The summary as stored, so the caller can name the decision it recorded. */
+  summary?: string
   error?: string
 }
 
@@ -86,6 +88,7 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
   // `{recorded: true, decisionId: ''}` and the caller silently lost the
   // decision. Capture failures must be loud, never inferred from absence.
   const decisionId = typeof res.decisionId === 'string' ? res.decisionId : ''
+  const summary = typeof res.summary === 'string' ? res.summary : input.summary
   if (res.success === false || !decisionId) {
     return {
       recorded: false,
@@ -96,7 +99,10 @@ export async function recordDecision(input: RecordDecisionInput): Promise<Record
     }
   }
 
-  return { recorded: true, decisionId }
+  // Echo the summary back beside the id so the caller can name what it just
+  // recorded — "«summary» (id)" — instead of printing a bare id. Costs nothing:
+  // the value was supplied by this same call.
+  return { recorded: true, decisionId, summary }
 }
 
 export const recordDecisionTool = {
