@@ -62,45 +62,19 @@ For the project you want Kawa Code to run on, create a `.mcp.json` file in your 
 
 The MCP server works together with the Kawa Code application, Kawa Code IDE extensions, and AI code generators such as Cursor AI and Claude Code.
 
-## Pre-edit decision check (Claude Code hook)
+## Pre-edit decision check (Claude Code hook) — retired
 
-Optional. When the agent is about to edit code that has prior recorded reasoning attached (an overlapping intent's blocks, or a constraint with the file in `relatedFiles`), the hook surfaces it before the Edit fires. Recommendation maps to action: silent (proceed), advisory context injected (review), or blocked with stderr message (`investigate-upstream`).
+> **Retired 2026-08-14. Do not wire this up.** Kawa Code no longer installs it, and the setup wizard no longer asks for it.
 
-Wire it as a Claude Code `PreToolUse` hook in your `~/.claude/settings.json` or project `.claude/settings.json`:
+This hook fired before every `Edit`/`Write` and surfaced prior reasoning attached to the file being changed. It was retired because its retrieval could not reach the decisions that mattered: it read only the most recently updated 100 decisions per repository, and architectural constraints — precisely what it existed to surface — are written once and then age out of a recency window permanently. On one of our own repositories, 160 decisions were of the surfaced types and only 17 were still inside that window.
+
+**If you already installed it, nothing breaks.** The `kawacode-on-pre-edit` binary still ships, and an existing entry in your `settings.json` keeps working. Kawa Code will not remove it for you — delete it yourself if you want it off:
 
 ```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          { "type": "command", "command": "npx -y -p @kawacode/mcp kawacode-on-pre-edit" }
-        ]
-      }
-    ]
-  }
-}
+"PreToolUse": [ { "matcher": "Edit|Write", "hooks": [ … ] } ]
 ```
 
-Override paths when blocked:
-
-- **Persistent (recommended):** record a fork decision that supersedes the existing one and retry the Edit.
-  ```
-  record_decision(type: "fork", supersedes: ["<surfaced-decision-id>"], rationale: "...")
-  ```
-- **For this session:** call `pre_edit_acknowledge(decisionIds: ["<surfaced-decision-id>"])`, then retry the Edit — that decision won't block again for the rest of the session. The acknowledgment is read back from your session transcript, so it needs no session token and is unaffected by daemon or session restarts within the same conversation.
-- **One-off:** add `force: true` to the Edit tool args to proceed a single time.
-
-Disable the hook for a session with `KAWA_PRE_EDIT_CHECK=off`.
-
-### Local telemetry (logs)
-
-Every pre-edit check fire (and force-override) appends a JSON line to a daily-rotated file at `~/.kawa-code/logs/pre-edit-decision-check-YYYY-MM-DD.jsonl`. Logs are **local only** — nothing leaves your machine. The defaults keep the last 30 days, capped at 100 MB total (oldest files dropped first).
-
-Each line records what fired, why, and what was filtered out — useful for tuning the recommendation thresholds and spotting false positives over time.
-
-Disable telemetry with `KAWA_PRE_EDIT_TELEMETRY=off`.
+**Nothing is lost on team coordination.** The live collision signal moved to the `Stop` hook some time ago, and that is now the only edit-level coordination surface. It reports teammates whose *in-progress, uncommitted* edits overlap the lines you touched this turn — conflict detection before a merge conflict can exist. See [Team conflict detection](#key-features).
 
 ## Key Features
 
