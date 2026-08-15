@@ -13,7 +13,7 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js'
 
-import { connectToMuninn, ensureRepo } from './services/muninn-ipc.js'
+import { connectToMuninn, disconnect, ensureRepo } from './services/muninn-ipc.js'
 import { resolveMangledArgs, describeChainedArgs } from './tools/_mangled-args.js'
 
 import {
@@ -326,6 +326,38 @@ function isRequired(zodType: any): boolean {
   return typeName !== 'ZodOptional' && typeName !== 'ZodDefault'
 }
 
+/**
+ * Terminate the server process, closing the Muninn socket on the way out.
+ *
+ * Until this existed the process had NO self-exit path at all. The SDK's
+ * `StdioServerTransport.close()` only calls `_stdin.pause()` and fires
+ * `onclose?.()` — it never exits — and the Muninn socket is a live handle that
+ * pins libuv's event loop indefinitely, so nothing ended the process except the
+ * parent killing it. A parent that dies without getting to that (SIGKILL,
+ * crash, force-quit) left the server running until reboot.
+ *
+ * That is worse than a stray process: the leaked server keeps its Muninn socket
+ * CONNECTED, so Muninn never observes a disconnect. The referenced-entities
+ * surface (DECISION_LINKING §6.8D) evicts a session's group on socket loss, and
+ * a leak defeats that in exactly the case eviction exists for.
+ *
+ * Idempotent: `onclose` and a signal can both fire for one shutdown.
+ */
+let shuttingDown = false
+function shutdown(reason: string): void {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.error(`Kawa Intents MCP Server shutting down (${reason})`)
+  try {
+    // Closes the socket so Muninn sees the disconnect promptly, and rejects any
+    // in-flight requests rather than leaving their promises dangling.
+    disconnect()
+  } catch (err) {
+    console.error(`Shutdown teardown failed: ${(err as Error).message}`)
+  }
+  process.exit(0)
+}
+
 // Main entry point
 async function main() {
   // Log to stderr (stdout is reserved for MCP protocol)
@@ -343,6 +375,37 @@ async function main() {
   // Start the stdio transport
   const transport = new StdioServerTransport()
   await server.connect(transport)
+
+  // The MCP stdio contract's shutdown signal is the client closing our stdin.
+  //
+  // ⚠️ `StdioServerTransport` does NOT implement it. Read its `start()`: it
+  // registers `data` and `error` on stdin and nothing else — no `end`, no
+  // `close`. So `transport.close()` is never called on EOF, `onclose` never
+  // fires, and a server that waits for it waits forever. Verified against
+  // @modelcontextprotocol/sdk's `server/stdio.js` after `server.onclose` alone
+  // failed to exit in testing. Every stdio server on this SDK has to wire EOF
+  // itself; there is no built-in path.
+  //
+  // This also covers an abruptly-killed parent: the kernel closes the dead
+  // parent's write end of the stdin pipe and the read end EOFs. Verified on the
+  // real `parent -> npm exec -> node` topology with SIGKILL, through the npm
+  // wrapper layer — which is why no `ppid` watchdog is needed.
+  process.stdin.on('end', () => shutdown('stdin closed'))
+  process.stdin.on('close', () => shutdown('stdin closed'))
+
+  // Distinct trigger, same action: something closed the transport
+  // programmatically. `Protocol.connect()` wraps `transport.onclose` and
+  // forwards here after its own cleanup, so this is the supported attachment
+  // point — assigning `transport.onclose` post-connect would clobber that
+  // wrapper. This is not a fallback for the EOF path above; it is a different
+  // event that also means "stop serving".
+  server.onclose = () => shutdown('stdio transport closed')
+
+  // Not needed to *terminate* — default disposition already does that — but it
+  // closes the Muninn socket cleanly instead of leaving Muninn to notice a
+  // half-open connection.
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 
   console.error('Kawa Intents MCP Server running')
 }
