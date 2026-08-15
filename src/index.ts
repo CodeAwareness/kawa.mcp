@@ -35,8 +35,6 @@ import {
   editSessionDecision,
   detectIntentConflicts,
   inferHistory,
-  preEditDecisionCheck,
-  preEditAcknowledge,
   getResolutionContext,
   arbiterResolve,
   arbiterApply
@@ -183,12 +181,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'infer_history':
         result = await inferHistory(args as any)
-        break
-      case 'pre_edit_decision_check':
-        result = await preEditDecisionCheck(args as any)
-        break
-      case 'pre_edit_acknowledge':
-        result = await preEditAcknowledge(args as any)
         break
       case 'get_resolution_context':
         result = await getResolutionContext(args as any)

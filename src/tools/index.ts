@@ -15,8 +15,6 @@ import { getDecisionDetailTool, getDecisionDetail, getDecisionDetailSchema } fro
 import { editSessionDecisionTool, editSessionDecision, editSessionDecisionSchema } from './edit-session-decision.js'
 import { detectIntentConflictsTool, detectIntentConflicts, detectIntentConflictsSchema } from './detect-intent-conflicts.js'
 import { inferHistoryTool, inferHistory, inferHistorySchema } from './infer-history.js'
-import { preEditDecisionCheckTool, preEditDecisionCheck, preEditDecisionCheckSchema } from './pre-edit-decision-check.js'
-import { preEditAcknowledgeTool, preEditAcknowledge, preEditAcknowledgeSchema } from './pre-edit-acknowledge.js'
 import { getResolutionContextTool, getResolutionContext, getResolutionContextSchema } from './get-resolution-context.js'
 import { arbiterResolveTool, arbiterResolve, arbiterResolveSchema } from './arbiter-resolve.js'
 import { arbiterApplyTool, arbiterApply, arbiterApplySchema } from './arbiter-apply.js'
@@ -82,12 +80,6 @@ export {
   inferHistorySchema,
   // Feature catalog
   // Pre-edit decision check
-  preEditDecisionCheckTool,
-  preEditDecisionCheck,
-  preEditDecisionCheckSchema,
-  preEditAcknowledgeTool,
-  preEditAcknowledge,
-  preEditAcknowledgeSchema,
   getResolutionContextTool,
   getResolutionContext,
   getResolutionContextSchema,
@@ -124,9 +116,9 @@ export const allTools = [
   // Inference pipeline tools
   inferHistoryTool,
   // Feature catalog
-  // Pre-edit decision check
-  preEditDecisionCheckTool,
-  preEditAcknowledgeTool,
+  // (pre_edit_decision_check / pre_edit_acknowledge were unregistered 2026-08-14
+  //  — the PreToolUse hook that drove them is retired. Sources retained in
+  //  src/tools/; see INTENT_INTELLIGENCE.md §13.)
   // Layer C conflict resolution
   getResolutionContextTool,
   // Arbiter v2 conflict resolution (resolve / apply)

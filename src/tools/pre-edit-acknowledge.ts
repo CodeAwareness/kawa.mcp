@@ -1,3 +1,17 @@
+/**
+ * ⚠️ UNREGISTERED 2026-08-14 — retained deliberately, NOT dead code.
+ *
+ * This tool is no longer in `allTools` or the `src/index.ts` dispatcher, so it
+ * is not exposed to any client. The `PreToolUse` hook that drove it is retired:
+ * Kawa Code no longer installs it and the README no longer documents wiring it
+ * up (see `INTENT_INTELLIGENCE.md` §13 for the measurements behind that call).
+ *
+ * The source stays so re-registering is a two-line change rather than a
+ * rewrite, and so the retirement stays legible. Do not delete it, and do not
+ * "clean up" the unused export. The same applies to `pre_edit_check/` in
+ * kawa.muninn and to `kawacode-on-pre-edit.ts` here — the hook binary still
+ * ships, so users who wired it up before the retirement keep working.
+ */
 import { z } from 'zod'
 
 import { resolveOrigin } from './resolve-origin.js'
