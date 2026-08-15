@@ -66,6 +66,7 @@ import { execSync } from 'node:child_process'
 import { resolve as resolvePath } from 'node:path'
 
 import { connectToMuninn, request, disconnect, setQuiet } from './services/muninn-ipc.js'
+import { harvestReferences } from './stop/referenced-ids.js'
 import { resolveOrigin } from './tools/resolve-origin.js'
 import { lastUnfinalizedCommit, nagAlreadyInTranscript, extractCommitPath, detectGateSave } from './stop/uncompleted-commit.js'
 import { emitInjection, emitActedOn, emitTurnEnd, estimateTokens } from './telemetry.js'
@@ -331,6 +332,56 @@ async function emitGateSaveSignal(payload: HookPayload): Promise<void> {
   } catch { /* fire-and-forget */ }
 }
 
+/**
+ * Job 4 — report the entity references this turn's answer named
+ * (DECISION_LINKING §6.8). Fire-and-forget: it produces no hook output and
+ * never influences whether the turn ends.
+ *
+ * FAILS CLOSED on a missing `CLAUDE_CODE_SESSION_ID` (§6.8E1). This hook is a
+ * DIFFERENT PROCESS from the MCP server, and each derives its session id from
+ * that variable independently — when it is set they agree by construction; when
+ * it is absent each falls back to its own random id, and the record would be
+ * filed under a session that owns nothing. A missing group is honest; a phantom
+ * one is not, and it fails silently.
+ */
+async function reportReferencedEntities(payload: HookPayload): Promise<void> {
+  if (process.env.KAWA_REFERENCED_ENTITIES === 'off') return
+  const cwd = payload.cwd
+  const transcriptPath = payload.transcript_path
+  if (!cwd || !transcriptPath) return
+
+  const sessionId = process.env.CLAUDE_CODE_SESSION_ID
+  if (!sessionId) return // see the fail-closed note above
+
+  let transcript: string
+  try {
+    transcript = readFileSync(transcriptPath, 'utf8')
+  } catch {
+    return
+  }
+
+  const { candidates, knownFull, firstRequest } = harvestReferences(transcript)
+  if (candidates.length === 0) return
+
+  let repoOrigin: string
+  try {
+    repoOrigin = resolveOrigin(undefined, cwd)
+  } catch {
+    return
+  }
+  if (!repoOrigin) return
+
+  // Tokens, never prose. Muninn resolves ids to labels and decides which of
+  // them name anything — the hook stays a lexer.
+  await request('session', 'referenced-entities', {
+    repoOrigin,
+    sessionId,
+    candidates,
+    knownFull,
+    label: firstRequest,
+  })
+}
+
 async function main(): Promise<void> {
   const captureOff = process.env.KAWA_THOUGHT_CAPTURE === 'off'
   const collisionOff = process.env.KAWA_STOP_COLLISION_CHECK === 'off'
@@ -365,6 +416,7 @@ async function main(): Promise<void> {
   // signal (VALUE_METRICS Phase 2).
   const captureTasks: Promise<unknown>[] = []
   captureTasks.push(emitGateSaveSignal(payload))
+  captureTasks.push(reportReferencedEntities(payload).catch(() => {}))
   if (!captureOff && sessionId && transcriptPath) {
     captureTasks.push(
       request('capture-thoughts', 'capture', {
