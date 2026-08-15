@@ -32,7 +32,8 @@ export interface ConflictMatch {
     decisionId: string
     summary: string
     intentTitle?: string
-    author?: string
+    // No `author`: §3.3 keeps display names inside Kawa Code. The panel shows
+    // who; the transcript does not need to.
   }
   sharedConcern?: string
   description?: string

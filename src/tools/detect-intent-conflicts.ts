@@ -15,7 +15,7 @@ export interface ConflictCandidate {
   intentId: string
   title: string
   description: string
-  author: string
+  /** Opaque owner id. NOT a display name — see the note on the mapping below. */
   authorId: string
   score: number
   overlappingFiles: string[]
@@ -54,7 +54,12 @@ export async function detectIntentConflicts(input: DetectIntentConflictsInput): 
     intentId: c.intentId || '',
     title: c.title || '',
     description: c.description || '',
-    author: c.author || '',
+    // `author` (the resolved display name) is deliberately NOT forwarded.
+    // DECISION_LINKING §3.3: names are resolved for the Kawa Code UX only and
+    // never enter an MCP payload — a name the model cannot act on is pure
+    // context cost, and it would push teammate PII into arbitrary client
+    // transcripts. `authorId` stays: opaque, non-PII, and enough to tell
+    // someone else's intent from your own.
     authorId: c.authorId || '',
     score: c.score || 0,
     overlappingFiles: c.overlappingFiles || [],
@@ -89,7 +94,7 @@ Returns scored conflict candidates with:
 - \`score\`: how strongly the candidate matches (higher = more likely conflict).
 - \`overlappingFiles\`: files affected by both intents.
 - \`decisions\`: decisions attached to the conflicting intent.
-- \`author\`: who is working on the conflicting intent.
+- \`authorId\`: opaque owner id — use it only to tell whether the intent is someone else's. Who they are is shown in Kawa Code, not here.
 
 The list is informational — review candidates and their decisions to decide whether coordination is needed.`,
   inputSchema: detectIntentConflictsSchema,

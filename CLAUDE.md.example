@@ -64,7 +64,7 @@ For exploration turns, still call `get_relevant_context` to enrich your answer �
 
 `create_and_activate_intent` auto-detects conflicts. When the tool returns `action: "conflict"`:
 
-1. Present each conflict to the user — severity, the conflicting intent's title/author, nature of the overlap.
+1. Present each conflict to the user — severity, the conflicting intent's title, nature of the overlap. **Do not name the author**: MCP payloads carry an opaque `authorId` only, never a display name (DECISION_LINKING §3.3). Who owns the conflicting intent is shown in Kawa Code.
 2. **Classify the conflict**:
    - **Supersession** — the new work *replaces* or *retargets* the conflicting intent (same problem area, different approach; the old intent's assumptions no longer hold).
    - **Independent overlap** — the conflict is structural (same files / domain) but the new work is unrelated to the old one's purpose.
