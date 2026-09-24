@@ -15,6 +15,7 @@ import {
 
 import { connectToMuninn, disconnect, ensureRepo } from './services/muninn-ipc.js'
 import { resolveMangledArgs, describeChainedArgs } from './tools/_mangled-args.js'
+import { missingRequiredArgs, describeMissingArgs, requiredKeys } from './tools/_required-args.js'
 
 import {
   allTools,
@@ -74,9 +75,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           ])
         ),
-        required: Object.entries(tool.inputSchema.shape)
-          .filter(([_, value]) => isRequired(value))
-          .map(([key]) => key)
+        // Same helper the dispatcher enforces with, so what we ADVERTISE as
+        // required and what we REJECT for being absent cannot drift apart.
+        required: requiredKeys(tool.inputSchema.shape)
       }
     }))
   }
@@ -119,6 +120,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         `[MuninnIPC] Recovered ${salvaged.length} malformed argument(s) for ${name}: ` +
           salvaged.map(s => `${s.field} (absorbed by ${s.fromField})`).join(', '),
       )
+    }
+  }
+
+  // Presence check, AFTER the repair above so a field absorbed by a malformed
+  // tool-call block is salvaged before it can be reported missing.
+  //
+  // Without this a missing required argument was forwarded as `undefined`, and
+  // the handler turned the resulting IPC error into a well-formed EMPTY result.
+  // A broken call was shaped exactly like "nothing found" — see _required-args.ts.
+  if (schema) {
+    const missing = missingRequiredArgs(
+      schema.shape as Record<string, unknown>,
+      args as Record<string, unknown> | undefined,
+    )
+    if (missing.length > 0) {
+      const message = describeMissingArgs(name, missing, args as Record<string, unknown> | undefined)
+      // stderr only — stdout is the MCP transport.
+      console.error(`[MuninnIPC] ${message}`)
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: false, error: message, tool: name }, null, 2),
+          },
+        ],
+        isError: true,
+      }
     }
   }
 
@@ -319,11 +347,6 @@ function getZodSchema(zodType: any): Record<string, any> {
     default:
       return { type: 'string' }
   }
-}
-
-function isRequired(zodType: any): boolean {
-  const typeName = zodType._def?.typeName
-  return typeName !== 'ZodOptional' && typeName !== 'ZodDefault'
 }
 
 /**
