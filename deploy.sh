@@ -124,7 +124,21 @@ echo "==> Validating server.json against MCP Registry schema"
 mcp-publisher validate
 
 echo "==> Publishing to npm"
-npm publish --access public
+# With web-based 2FA, npm's first PUT gets a 401, the user approves in the
+# browser, the registry completes that pending publish itself, and npm then
+# retries the PUT — which fails with 403 "cannot publish over the previously
+# published versions". npm exits non-zero although the publish landed. So on
+# failure, ask the registry whether this exact version is live: if it is, the
+# publish succeeded; if not, it was a real failure and we abort as before.
+if ! npm publish --access public; then
+  PKG_NAME="$(node -e "process.stdout.write(require('./package.json').name)")"
+  if [ "$(npm view "$PKG_NAME@${NEW_VERSION#v}" version --prefer-online 2>/dev/null)" = "${NEW_VERSION#v}" ]; then
+    echo "    npm publish reported an error, but $PKG_NAME@${NEW_VERSION#v} is live on npm — continuing"
+  else
+    echo "ERROR: npm publish failed and $PKG_NAME@${NEW_VERSION#v} is not on the registry." >&2
+    exit 1
+  fi
+fi
 
 # Point of no return: npm now owns this version number and `npm publish` would
 # reject a re-publish, so the bump must stand even if the registry steps below

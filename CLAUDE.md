@@ -64,6 +64,7 @@ Use `--no-bump` when the version was already bumped in a prior commit — e.g. a
 5. **Sync** — `server.json` top-level `version` and `packages[0].version` updated to match `package.json` (see version sync invariant above).
 6. **Validate** — `mcp-publisher validate` checks `server.json` against the live registry schema. Catches errors before any publish lands. Note the registry caps `description` at **100 chars**.
 7. **npm publish** — `--access public`. On success the rollback guard is **disarmed** — the version is now permanent.
+   **Web-2FA quirk (npm 11):** the first PUT gets a 401, you approve in the browser, the registry completes that pending publish itself, and npm then retries the PUT and fails with `403 … cannot publish over the previously published versions`, so `npm publish` exits non-zero even though the publish went through (observed on 8.1.1). So when `npm publish` fails, the script runs `npm view @kawacode/mcp@<version> version --prefer-online`: if that exact version is live it continues, and otherwise it aborts and the rollback guard fires as usual.
 8. **Registry auth** — DNS-method, Ed25519, against `kawacode.ai`. The script extracts the raw 32-byte private key from the PEM with:
    ```bash
    openssl pkey -in mcp-registry-key.pem -outform DER | tail -c 32 | xxd -p -c 64
@@ -99,7 +100,7 @@ mcp-publisher login dns --domain kawacode.ai --private-key "$PRIVATE_KEY_HEX" --
 mcp-publisher publish
 ```
 
-Do **not** re-run `./deploy.sh` — `npm publish` rejects re-publishing the same version, and `npm version` would bump again unnecessarily.
+Do **not** re-run plain `./deploy.sh` — `npm version` would bump again unnecessarily. `./deploy.sh --no-bump` does work as a recovery path: npm rejects the re-publish, step 7 sees the version is already live and continues on to the registry, commit and tag.
 
 ---
 
