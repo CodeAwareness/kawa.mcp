@@ -21,7 +21,8 @@ export type CompleteIntentInput = z.infer<typeof completeIntentSchema>
  * that conflict with previously-recorded ones. Since COMPLETION_CONFLICT_DECOUPLE.md
  * these no longer block completion — the commit (status + blocks) already landed;
  * each conflicting decision is *parked* for an async disposition in the
- * Orchestration panel (supersede / keep-both / reject).
+ * Orchestration panel, which owns the options — this file deliberately does
+ * not list them, so it cannot go stale when the panel gains one.
  */
 export interface ConflictMatch {
   /** Stable distillation id of the proposed decision; the panel keys the disposition on it. */
@@ -80,7 +81,7 @@ export interface CompleteIntentResponse {
    * standards. Since COMPLETION_CONFLICT_DECOUPLE.md the completion still
    * SUCCEEDED (success=true, status flipped, blocks captured) — these decisions
    * are *deferred*: parked for an async disposition in the Orchestration panel
-   * (supersede / keep-both / reject). There is nothing to retry.
+   * (the panel owns the options). There is nothing to retry.
    */
   deferredConflicts?: ConflictMatch[]
   /**
@@ -218,7 +219,7 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
     // standards did NOT block the completion — they're parked for a disposition
     // in the Orchestration panel. Surface the count; there is nothing to retry.
     const deferredConflictPart = deferredConflicts.length > 0
-      ? ` — ${deferredConflicts.length} distilled decision(s) need a disposition in the Orchestration panel (supersede / keep-both / reject)`
+      ? ` — ${deferredConflicts.length} distilled decision(s) need a disposition in the Orchestration panel`
       : ''
     message = statusMsg + shaPart + distilledPart + deferredPart + collisionPart + deferredConflictPart
   }
