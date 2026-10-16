@@ -325,6 +325,10 @@ The intent workflow only applies to git repositories. For non-git directories:
 - Use standard file operations
 - No commit flow needed
 
+### Repository Access Refused
+
+If a tool returns `error: "no_repo_access"` (`retryable: false`), do not retry: tell the user the `reason` and what to do about it (for `app_not_installed`, install the Kawa Code GitHub App on the repository), then continue the task without Kawa Code tools.
+
 ### Team Conflicts
 
 Before modifying files, check `get_intents_for_file`. If a teammate has an active intent on the same file:

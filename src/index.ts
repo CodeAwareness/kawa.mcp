@@ -13,7 +13,7 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js'
 
-import { connectToMuninn, disconnect, ensureRepo } from './services/muninn-ipc.js'
+import { connectToMuninn, disconnect, ensureRepo, RepoAccessError, repoAccessToolOutput } from './services/muninn-ipc.js'
 import { resolveMangledArgs, describeChainedArgs } from './tools/_mangled-args.js'
 import { missingRequiredArgs, describeMissingArgs, requiredKeys } from './tools/_required-args.js'
 
@@ -238,6 +238,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Errors that are not IPC-related (e.g. unknown tool name) are still
     // raised as McpError below.
     if (error instanceof McpError) throw error
+    if (error instanceof RepoAccessError) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify(repoAccessToolOutput(error, name), null, 2) }],
+        isError: true,
+      }
+    }
     const message = error instanceof Error ? error.message : 'Tool execution failed'
     return {
       content: [

@@ -58,7 +58,7 @@ let socket: net.Socket | null = null
 let connected = false
 let cawId = ''
 let connectionPromise: Promise<void> | null = null
-const pendingRequests = new Map<string, PendingRequest>()
+export const pendingRequests = new Map<string, PendingRequest>()
 
 /**
  * Quiet mode: suppresses connection-lifecycle info logging (connect,
@@ -256,6 +256,35 @@ function connectClientPipe(
   })
 }
 
+/**
+ * Kawa Code refused access to a repository (private repo without the GitHub App,
+ * unsupported host, not a member, ...). Carried as its own type so it survives
+ * `ensureRepo` and the dispatcher catch intact and the agent can be told to stop
+ * retrying. Muninn sends `{ success: false, code: 'no_repo_access', accessReason, error }`.
+ */
+export class RepoAccessError extends Error {
+  readonly code = 'no_repo_access' as const
+  readonly accessReason: string
+
+  constructor(message: string, accessReason: string) {
+    super(message)
+    this.name = 'RepoAccessError'
+    this.accessReason = accessReason
+  }
+}
+
+/** Structured, non-retryable tool output for a repo-access refusal. */
+export function repoAccessToolOutput(err: RepoAccessError, tool: string) {
+  return {
+    success: false,
+    error: err.code,
+    reason: err.accessReason,
+    retryable: false,
+    message: `${err.message} Do not retry. Tell the user the reason and what to do about it.`,
+    tool,
+  }
+}
+
 /** Route an inbound response message to its waiting pendingRequest entry.
  *
  * Failure propagation has two layers:
@@ -272,7 +301,7 @@ function connectClientPipe(
  * responses (`{ estimate: {...} }`) carry no `success` field at all and must
  * pass through unchanged.
  */
-function routeResponse(msg: any): void {
+export function routeResponse(msg: any): void {
   const msgId = msg._msgId
   if (msgId && pendingRequests.has(msgId)) {
     const pending = pendingRequests.get(msgId)!
@@ -283,6 +312,16 @@ function routeResponse(msg: any): void {
       return
     }
     const data = msg.data || {}
+    if (data.success === false && data.code === 'no_repo_access') {
+      // A refusal must never take the structured-failure carve-out below: it may
+      // carry a string `reason`, which would resolve it as data and let a tool
+      // treat the refusal as success. Reject with the typed error instead.
+      const text = typeof data.error === 'string' && data.error.length > 0
+        ? data.error
+        : 'Kawa Code refused access to this repository.'
+      pending.reject(new RepoAccessError(text, typeof data.accessReason === 'string' ? data.accessReason : 'unknown'))
+      return
+    }
     if (data.success === false) {
       // Some handlers return structured failure shapes the calling tool is
       // designed to interpret and present — these are data, not dispatch
@@ -377,6 +416,7 @@ export async function ensureRepo(repoPath: string): Promise<void> {
   try {
     await request('code', 'add', { folder: repoPath })
   } catch (err) {
+    if (err instanceof RepoAccessError) throw err
     throw new Error(`Could not register repository "${repoPath}" with Kawa Code: ${(err as Error).message}`)
   }
 }
