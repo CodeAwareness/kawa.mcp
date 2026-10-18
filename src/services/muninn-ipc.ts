@@ -280,7 +280,7 @@ export function repoAccessToolOutput(err: RepoAccessError, tool: string) {
     error: err.code,
     reason: err.accessReason,
     retryable: false,
-    message: `${err.message} Do not retry. Tell the user the reason and what to do about it.`,
+    message: `${err.message.replace(/[\s.]*$/, '')}. Do not retry. Tell the user the reason and what to do about it.`,
     tool,
   }
 }

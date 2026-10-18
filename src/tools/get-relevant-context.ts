@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { request } from '../services/muninn-ipc.js'
+import { request, RepoAccessError } from '../services/muninn-ipc.js'
 import { resolveOrigin } from './resolve-origin.js'
 import { emitInjection, estimateTokens } from '../telemetry.js'
 
@@ -78,8 +78,11 @@ export async function getRelevantContext(input: GetRelevantContextInput): Promis
       minScore: input.minRelevance,
     })
   } catch (err: any) {
+    // A refusal is not an outage: relay it so the dispatcher emits the structured,
+    // non-retryable no_repo_access output instead of an empty "nothing relevant" result.
+    if (err instanceof RepoAccessError) throw err
     const msg = err?.message || String(err)
-    return { ...EMPTY_RESPONSE(actualOrigin, input.repoPath), error: `Muninn unavailable: ${msg}` }
+    return { ...EMPTY_RESPONSE(actualOrigin, input.repoPath), error: `Kawa Code unavailable: ${msg}` }
   }
 
   const response: GetRelevantContextResponse = {

@@ -57,6 +57,13 @@ test('the tool output is structured and non-retryable', () => {
   assert.match(out.message, /refused\./)
 })
 
+test('the tool output separates the refusal text from the instruction, whatever the text ends with', () => {
+  const noStop = repoAccessToolOutput(new RepoAccessError('No access (unsupported_host)', 'unsupported_host'), 't')
+  assert.match(noStop.message, /^No access \(unsupported_host\)\. Do not retry\./)
+  const stop = repoAccessToolOutput(new RepoAccessError('Install the App. ', 'app_not_installed'), 't')
+  assert.match(stop.message, /^Install the App\. Do not retry\./)
+})
+
 test('conflicts, frozen and transient-failure shapes still resolve as data', async () => {
   const shapes = [
     { success: false, conflict: true, conflicts: [{ intentId: 'a' }] },

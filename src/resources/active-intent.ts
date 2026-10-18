@@ -1,4 +1,4 @@
-import { request, isConnected } from '../services/muninn-ipc.js'
+import { request, isConnected, RepoAccessError, repoAccessToolOutput } from '../services/muninn-ipc.js'
 
 export interface ActiveIntentResource {
   uri: string
@@ -52,7 +52,11 @@ export async function readActiveIntentResource(repoOrigin?: string): Promise<str
         blockCount: 0
       }
     }, null, 2)
-  } catch {
+  } catch (err) {
+    // A refusal is not a failed query: relay the structured, non-retryable output.
+    if (err instanceof RepoAccessError) {
+      return JSON.stringify(repoAccessToolOutput(err, activeIntentResource.uri), null, 2)
+    }
     return JSON.stringify({
       hasActiveIntent: false,
       note: 'Failed to query Muninn for active intent.'
