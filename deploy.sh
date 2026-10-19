@@ -145,6 +145,29 @@ fi
 # fail. Disarm the rollback guard.
 disarm_rollback
 
+# The MCP Registry validates the package against npm's own registry, and npm
+# can take a few minutes to serve a version it has just accepted (the 8.1.2
+# deploy got "version '8.1.2' was not found (status: 404)" while the tarball
+# was already downloadable). Wait for the per-version endpoint the registry
+# reads, instead of racing it. One bounded wait on a precondition; the publish
+# itself is never retried.
+PKG_NAME="$(node -e "process.stdout.write(require('./package.json').name)")"
+PKG_VERSION="${NEW_VERSION#v}"
+PKG_URL="https://registry.npmjs.org/${PKG_NAME/\//%2f}/${PKG_VERSION}"
+NPM_WAIT_SECONDS=600
+echo "==> Waiting for $PKG_NAME@$PKG_VERSION to be visible on npm (up to ${NPM_WAIT_SECONDS}s)"
+waited=0
+until [ "$(curl -s -o /dev/null -w '%{http_code}' "$PKG_URL")" = "200" ]; do
+  if [ "$waited" -ge "$NPM_WAIT_SECONDS" ]; then
+    echo "ERROR: $PKG_NAME@$PKG_VERSION is published but still not visible at $PKG_URL after ${NPM_WAIT_SECONDS}s." >&2
+    echo "       The version stands; register it later with: mcp-publisher login dns … && mcp-publisher publish" >&2
+    exit 1
+  fi
+  sleep 10
+  waited=$((waited + 10))
+done
+echo "    visible after ${waited}s"
+
 echo "==> Authenticating with MCP Registry (DNS, $DOMAIN)"
 PRIVATE_KEY_HEX=$("$OPENSSL_BIN" pkey -in "$KEY_FILE" -outform DER | tail -c 32 | xxd -p -c 64)
 mcp-publisher login dns --domain "$DOMAIN" --private-key "$PRIVATE_KEY_HEX" --algorithm ed25519
