@@ -87,10 +87,10 @@ export interface CompleteIntentResponse {
   /**
    * Set when success=false to discriminate the failure mode:
    *  - "transient-failure" → distiller LLM call or /check-conflicts API errored;
-   *     `failedStage` and `error` carry diagnostics, the user retries.
-   *  - any other string (e.g. "resolution_required", "completion_locked") is
-   *     passed through as Kawa Code sent it; its `message` / `error` is already
-   *     folded into `message` below, so no reason needs its own branch here.
+   *     `failedStage` and `error` carry diagnostics.
+   *  - "resolution_required", "completion_locked", … likewise.
+   * Passed through as Kawa Code sent it. Its `message` / `error` is folded into
+   * `message` below, so this file knows no reason by name.
    */
   reason?: string
   failedStage?: string
@@ -172,18 +172,8 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   let newStatus: string
   let message: string
 
-  if (!success && reason === 'transient-failure') {
-    // Distiller LLM error or /check-conflicts API error. Bucket re-populated,
-    // intent stays active. User decides whether to wait + retry or abandon.
-    newStatus = res.status || 'active'
-    const stage = res.failedStage ? ` (${res.failedStage})` : ''
-    const errPart = res.error ? `: ${res.error}` : ''
-    message =
-      `Could not complete intent "${intentTitle}" — transient failure${stage}${errPart}. ` +
-      `The ephemerals were preserved. Wait for the underlying issue to clear, then retry complete_intent. ` +
-      `If retrying repeatedly fails, the user can abandon the intent (complete_intent(status="abandoned")).`
-  } else if (!success) {
-    // Catch-all for every other failure shape (resolution_required,
+  if (!success) {
+    // Every failure shape (transient-failure, resolution_required,
     // completion_locked, legacy errors), plus the anomalous "no failure
     // declared AND no intentId" case. In the latter nothing ran, so do NOT echo
     // the requested status as though it had landed. Kawa Code owns the wording
