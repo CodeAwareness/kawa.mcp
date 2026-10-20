@@ -88,8 +88,11 @@ export interface CompleteIntentResponse {
    * Set when success=false to discriminate the failure mode:
    *  - "transient-failure" → distiller LLM call or /check-conflicts API errored;
    *     `failedStage` and `error` carry diagnostics, the user retries.
+   *  - any other string (e.g. "resolution_required", "completion_locked") is
+   *     passed through as Kawa Code sent it; its `message` / `error` is already
+   *     folded into `message` below, so no reason needs its own branch here.
    */
-  reason?: 'transient-failure'
+  reason?: string
   failedStage?: string
   error?: string
   /**
@@ -160,8 +163,7 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
   const deferredConflicts: ConflictMatch[] = Array.isArray(res.deferredConflicts) ? res.deferredConflicts : []
   const committedDecisionCount: number | undefined =
     typeof res.committedDecisionCount === 'number' ? res.committedDecisionCount : undefined
-  const reason: 'transient-failure' | undefined =
-    res.reason === 'transient-failure' ? res.reason : undefined
+  const reason: string | undefined = typeof res.reason === 'string' ? res.reason : undefined
   const apiSyncDeferred = res.apiSyncDeferred === true
   const completionCollisions: CompletionCollision[] = Array.isArray(res.collisions) ? res.collisions : []
 
@@ -181,12 +183,17 @@ export async function completeIntent(input: CompleteIntentInput): Promise<Comple
       `The ephemerals were preserved. Wait for the underlying issue to clear, then retry complete_intent. ` +
       `If retrying repeatedly fails, the user can abandon the intent (complete_intent(status="abandoned")).`
   } else if (!success) {
-    // Catch-all for legacy / unexpected error shapes, plus the anomalous
-    // "no failure declared AND no intentId" case. In the latter nothing ran,
-    // so do NOT echo the requested status as though it had landed.
+    // Catch-all for every other failure shape (resolution_required,
+    // completion_locked, legacy errors), plus the anomalous "no failure
+    // declared AND no intentId" case. In the latter nothing ran, so do NOT echo
+    // the requested status as though it had landed. Kawa Code owns the wording
+    // of what to do next: relay its `message` (else `error`) verbatim.
     newStatus = res.newStatus || res.status || (intentId ? input.status : 'active')
+    const guidance = typeof res.message === 'string' && res.message
+      ? res.message
+      : typeof res.error === 'string' ? res.error : ''
     message = intentId
-      ? `Failed to complete intent "${intentTitle}".`
+      ? `Failed to complete intent "${intentTitle}".${guidance ? ` ${guidance}` : ''}`
       : `Could not complete intent "${intentTitle}" — Kawa Code returned no intent id, so NOTHING was completed: the status was not changed, no code blocks were captured, and no decisions were distilled. Do NOT report this as committed. Retry complete_intent; if it fails again, surface the failure to the user rather than assuming the intent closed.`
   } else {
     // Clean completion. Note: Phase 3.5 may have queued writes for later
@@ -255,6 +262,8 @@ You MUST inspect the response:
 - success === true — done. If committedDecisionCount > 0, say N decisions were recorded; do NOT list them. If apiSyncDeferred, say the sync was deferred and will replay. If collisions is non-empty, relay it as an advisory coordination heads-up (collisions[].label + files) — the completion still succeeded. If deferredConflicts is non-empty, the completion ALSO succeeded; say "N decision(s) need a disposition in the Kawa Code panel" and do NOT re-run this tool.
 
 - success === false && reason === "transient-failure" — the intent stays active and nothing was lost. Report failedStage plus the error; retry once the cause clears, or abandon if it persists.
+
+- success === false with any other reason (e.g. "resolution_required", "completion_locked") — the intent stays active and nothing was written. \`message\` carries Kawa Code's instructions for the next step; follow them rather than retrying blindly.
 
 Autonomous sessions: deferredConflicts is not a blocking state — log and continue.`,
   inputSchema: completeIntentSchema,
