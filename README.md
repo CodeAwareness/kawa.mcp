@@ -117,7 +117,7 @@ Because compiled build directories can't be shared, they multiply — one per wo
 
 Isolation alone would just give you several agents doing overlapping work in private. Kawa's job is the coordination on top.
 
-Each agent session gets its own identity, and intents are tracked **per session** — so several intents can be active on one repository at once, each with its own current focus, without a lock and without agents clobbering each other's context. From there the normal machinery applies across agents exactly as it does across teammates: `get_relevant_context` surfaces what the *other* agents have already decided, `create_and_activate_intent` reports a conflict when new work overlaps something already in flight, and the pre-edit check fires on reasoning any of them recorded.
+Each agent session gets its own identity, and intents are tracked **per session** — so several intents can be active on one repository at once, each with its own current focus, without a lock and without agents clobbering each other's context. From there the normal machinery applies across agents exactly as it does across teammates: `get_relevant_context` surfaces what the *other* agents have already decided, `create_and_activate_intent` hands the user a decision in Kawa Code when new work overlaps something already in flight, and the pre-edit check fires on reasoning any of them recorded.
 
 The practical result: your agents inherit each other's decisions instead of re-deriving them, and you find out about overlapping work while it's still cheap to redirect — not at merge time.
 

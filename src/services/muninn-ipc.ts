@@ -352,6 +352,20 @@ export function routeResponse(msg: any): void {
 }
 
 /**
+ * A request got no answer within its timeout. A class of its own because "Kawa
+ * Code is busy" is not the same as "Kawa Code said no": it runs one request at a
+ * time, so a call can wait behind another session's slow handler, and a tool that
+ * can safely ask again (create_and_activate_intent's wait) needs to tell the two
+ * apart without matching on message text.
+ */
+export class MuninnTimeoutError extends Error {
+  constructor(timeoutMs: number, domain: string, action: string) {
+    super(`Muninn request timeout (${timeoutMs / 1000}s): ${domain}:${action}`)
+    this.name = 'MuninnTimeoutError'
+  }
+}
+
+/**
  * Send an IPC request to Muninn and await the correlated response.
  *
  * @param domain    - Handler domain (e.g., 'intent', 'decision')
@@ -379,7 +393,7 @@ export async function request(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingRequests.delete(msgId)
-      reject(new Error(`Muninn request timeout (${timeoutMs / 1000}s): ${domain}:${action}`))
+      reject(new MuninnTimeoutError(timeoutMs, domain, action))
     }, timeoutMs)
 
     pendingRequests.set(msgId, { resolve, reject, timer })

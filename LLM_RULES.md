@@ -212,7 +212,7 @@ When uncommitted changes exist that weren't made under an active intent, infer i
 | Tool | Purpose |
 |------|---------|
 | `check_active_intent` | Check for active intent before starting work |
-| `create_and_activate_intent` | Create new intent for a task |
+| `create_and_activate_intent` | Create new intent for a task. If it overlaps existing work, Kawa Code asks the user: act on `action` (`pending_approval` → call again with the `pendingId`; `declined` → stop all work). There is no `force` |
 | `resume_intent` | Resume an existing intent by id in one call (activate + load its decisions) — use for a "follow up on intent &lt;id&gt;" handoff instead of creating a new one |
 | `get_intents_for_file` | Check for team conflicts on a file; pass `startLine`/`endLine` to narrow to a line range |
 | `assign_blocks_to_intent` | Associate code changes with intent |

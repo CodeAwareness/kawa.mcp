@@ -62,19 +62,15 @@ For exploration turns, still call `get_relevant_context` to enrich your answer �
 
 ## Intent conflicts
 
-`create_and_activate_intent` auto-detects conflicts. When the tool returns `action: "conflict"`:
+When a new intent overlaps existing work, **Kawa Code asks the user — you do not decide.** `create_and_activate_intent` reports the outcome in `action`:
 
-1. Present each conflict to the user — severity, the conflicting intent's title, nature of the overlap. **Do not name the author**: MCP payloads carry an opaque `authorId` only, never a display name (DECISION_LINKING §3.3). Who owns the conflicting intent is shown in Kawa Code.
-2. **Classify the conflict**:
-   - **Supersession** — the new work *replaces* or *retargets* the conflicting intent (same problem area, different approach; the old intent's assumptions no longer hold).
-   - **Independent overlap** — the conflict is structural (same files / domain) but the new work is unrelated to the old one's purpose.
-3. Ask the user for the disposition. **For supersession**, prefer this flow:
-   - Create the new intent with `force: true`.
-   - Then `complete_intent(intentId=<old>, status="superseded", supersededBy=<new>)`. This requires the old intent to be active, so: `activate_intent(<old>, force: true)` → `complete_intent(... status="superseded" ...)` → `activate_intent(<new>)`.
-   - The lineage is durably recorded and queryable from either side.
-4. **For independent overlap**, just retry `create_and_activate_intent` with `force: true`. Bypassed conflict IDs are recorded for audit, but no formal relationship is stored — the two intents remain unrelated in lineage walks.
+- `created` / `reactivated` — done; the intent is active. Proceed.
+- `pending_approval` — the user has been asked in Kawa Code (Orchestration panel). Tell them it is waiting for them, then call the tool again with the returned `pendingId` (same title, description and `repoPath`). Each call waits up to ~20 seconds for the answer.
+- `awaiting_user` — stop calling. Tell the user the decision is waiting in Kawa Code, and call once more with the `pendingId` only after they say they have answered.
+- `declined` — the user said no. **Stop all work on this task** and tell them.
+- `expired` / `unknown_pending` — nothing was decided; call again without `pendingId` if the work is still wanted.
 
-`force: true` only bypasses the conflict-detection block; it does NOT record any relationship. Always reach for supersession first when the new work genuinely replaces the old.
+There is no `force` option and no way to bypass an overlap from the agent's side. The user chooses, in Kawa Code, whether the new work is independent of the existing intent or supersedes it; the lineage is recorded there. Do not name the authors of conflicting intents — you are not given them, and who owns what is shown in Kawa Code.
 
 ---
 
