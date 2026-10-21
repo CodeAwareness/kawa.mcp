@@ -125,6 +125,7 @@ Single client — owns the socket connection lifecycle, message framing, and `en
 - `src/prompts/` — MCP prompts (e.g. `intentFirstWorkflowPrompt`).
 - `src/resources/` — MCP resources (e.g. `kawa://intent/active`).
 - `src/kawacode-on-stop.ts` + `bin: kawacode-on-stop` — the **Stop** hook CLI. Runs thought capture, the live-collision report, and the uncompleted-commit gate once per turn. **This is now the only edit-level agent-coordination hook.**
+- `src/kawacode-on-session-end.ts` + `bin: kawacode-on-session-end` — the **SessionEnd** hook CLI. One IPC (`intent:pending-intent-session-ended {aid}`) so Kawa Code does not create an intent for a request parked by a session that has ended. Fail-soft; Kawa Code installs it.
 - `src/kawacode-on-pre-edit.ts` + `bin: kawacode-on-pre-edit` — the `PreToolUse` hook CLI. ⚠️ **RETIRED 2026-08-14** (`INTENT_INTELLIGENCE.md` §13). Kawa Code no longer installs it and the README no longer documents wiring it up, but the binary still ships so existing user installs keep working. Retained deliberately — do not delete it or the `pre_edit_decision_check` / `pre_edit_acknowledge` tools as dead code.
 
 > The two entries above were previously listed as `src/extract-trigger.ts` (`kawacode-extract-trigger`) and `src/pre-edit-decision-check-hook.ts` (`kawacode-pre-edit-decision-check`). **Neither file nor bin exists** — corrected 2026-08-14. The real bin list is in `package.json`; trust it over this map.
